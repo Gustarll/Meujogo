@@ -1,4 +1,42 @@
-// CONFIGURAÇÃO FIREBASE
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Whiter Boss - MULTIPLAYER CORRIGIDO</title>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+    <style>
+        body { margin: 0; background: #1a1a2e; color: white; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #game-board { position: relative; width: 800px; height: 500px; background: #b8b8b8; border: 4px solid #16213e; display: none; }
+        #player { position: absolute; width: 40px; height: 40px; background: #e94560; border-radius: 8px; z-index: 10; }
+        .other-player { position: absolute; width: 40px; height: 40px; background: #0077ff; border-radius: 8px; z-index: 9; }
+        .enemy { position: absolute; width: 30px; height: 30px; background: #2ecc71; border-radius: 5px; }
+        .player-name { position: absolute; top: -20px; width: 100px; text-align: center; left: -30px; font-size: 12px; font-weight: bold; color: black; }
+        #login-screen, #config-panel { position: fixed; inset: 0; background: #1a1a2e; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
+        #config-panel { display: none; background: rgba(0,0,0,0.8); }
+        button { padding: 10px 20px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 5px; margin: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h1>WHITER BATTLE</h1>
+        <input type="text" id="username-input" placeholder="Seu nome..." maxlength="10">
+        <button onclick="startGame()">ENTRAR NO JOGO</button>
+    </div>
+
+    <div id="config-panel">
+        <h2>JOGO PAUSADO PELO ADM</h2>
+        <button onclick="createRoom()">CRIAR SALA</button>
+        <button onclick="joinRoomPrompt()">ENTRAR EM SALA</button>
+        <p id="room-id-display"></p>
+    </div>
+
+    <div id="game-board">
+        <div id="player"><div class="player-name" id="my-name-tag"></div></div>
+    </div>
+
+    <script>
         const firebaseConfig = {
             apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
             authDomain: "whitermultiplayer.firebaseapp.com",
@@ -12,21 +50,15 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
         let playerRef, roomRef, myID;
-
-        // ESTADO DO JOGO
-        const board = document.getElementById('game-board');
-        let posX = 380, posY = 230, hp = 100, xp = 0, level = 1;
-        let isPaused = false, isStarted = false, isDead = false;
-        const keys = {}, enemies = [], bullets = [], allPlayers = {};
+        let posX = 380, posY = 230, isPaused = false, isStarted = false;
+        const keys = {}, enemies = [], allPlayers = {};
 
         function startGame() {
             const name = document.getElementById('username-input').value || "Player";
             document.getElementById('my-name-tag').innerText = name;
             document.getElementById('login-screen').style.display = 'none';
-            board.style.display = 'block';
-            document.getElementById('ui-stack').style.display = 'flex';
+            document.getElementById('game-board').style.display = 'block';
             isStarted = true;
-            window.lastSpawn = performance.now();
             requestAnimationFrame(gameLoop);
         }
 
@@ -35,157 +67,88 @@
             roomRef = db.ref('rooms/' + code);
             playerRef = roomRef.child('players').push();
             myID = playerRef.key;
-            
             playerRef.set({ name: document.getElementById('my-name-tag').innerText, x: posX, y: posY });
             playerRef.onDisconnect().remove();
-            
-            // SINCRONIZAÇÃO DE PAUSE E JOGADORES
-            roomRef.on('value', snapshot => {
-                const data = snapshot.val() || {};
+
+            roomRef.on('value', snap => {
+                const data = snap.val() || {};
                 isPaused = data.isPaused || false;
-                document.getElementById('config-panel').style.display = isPaused ? 'block' : 'none';
+                document.getElementById('config-panel').style.display = isPaused ? 'flex' : 'none';
                 
-                // Atualiza lista de todos os jogadores para os inimigos seguirem
                 const players = data.players || {};
                 document.querySelectorAll('.other-player').forEach(el => el.remove());
                 for (let id in players) {
-                    allPlayers[id] = players[id]; // Guarda posições
+                    allPlayers[id] = players[id];
                     if (id !== myID) {
                         const p = players[id];
                         const el = document.createElement('div');
                         el.className = 'other-player';
                         el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
                         el.innerHTML = `<div class="player-name">${p.name}</div>`;
-                        board.appendChild(el);
+                        document.getElementById('game-board').appendChild(el);
                     }
                 }
             });
-
-            document.getElementById('room-info').innerText = "Sala: " + code;
-            document.getElementById('room-display').innerText = "CÓDIGO: " + code;
-            toggleMenu(false); // Fecha menu ao entrar
+            document.getElementById('room-id-display').innerText = "CÓDIGO DA SALA: " + code;
         }
 
-        function toggleMenu(forceState = null) {
-            if(!isStarted) return;
+        function togglePause() {
+            if (!isStarted || !roomRef) return;
             const myName = document.getElementById('my-name-tag').innerText;
-            
-            // SÓ O ADM "Gusta" controla o pause da sala
-            if (myName === "Gusta" && roomRef) {
-                let newState = (forceState !== null) ? forceState : !isPaused;
-                roomRef.child('isPaused').set(newState);
-            } else if (!roomRef) {
-                isPaused = !isPaused;
-                document.getElementById('config-panel').style.display = isPaused ? 'block' : 'none';
+            // APENAS O NOME "Gusta" PODE PAUSAR PARA TODOS
+            if (myName === "Gusta") {
+                roomRef.child('isPaused').set(!isPaused);
             }
         }
 
-        // --- LÓGICA DE INIMIGOS E MOVIMENTO ---
         window.addEventListener('keydown', e => { 
             keys[e.key.toLowerCase()] = true; 
-            if(e.key === 'escape') toggleMenu();
+            if(e.key === 'escape') togglePause();
         });
         window.addEventListener('keyup', e => delete keys[e.key.toLowerCase()]);
 
         function spawnEnemy() {
             const el = document.createElement('div');
             el.className = 'enemy';
-            el.style.width = '30px'; el.style.height = '30px'; el.style.backgroundColor = '#2ecc71';
             let ex = Math.random() > 0.5 ? -40 : 840, ey = Math.random() * 500;
-            board.appendChild(el);
-            enemies.push({ el, x: ex, y: ey, hp: 2, speed: 1.5 + (level * 0.1) });
+            document.getElementById('game-board').appendChild(el);
+            enemies.push({ el, x: ex, y: ey, speed: 2 });
         }
 
+        let lastSpawn = 0;
         function gameLoop(time) {
-            if (isStarted && !isPaused && !isDead) {
-                if (time - (window.lastSpawn || 0) > 2000 - (level * 50)) {
-                    spawnEnemy();
-                    window.lastSpawn = time;
-                }
+            if (isStarted && !isPaused) {
+                if (time - lastSpawn > 2000) { spawnEnemy(); lastSpawn = time; }
 
-                // Movimento Local
-                let moved = false;
-                if (keys['w']) { posY -= 5; moved = true; }
-                if (keys['s']) { posY += 5; moved = true; }
-                if (keys['a']) { posX -= 5; moved = true; }
-                if (keys['d']) { posX += 5; moved = true; }
+                if (keys['w']) posY -= 5; if (keys['s']) posY += 5;
+                if (keys['a']) posX -= 5; if (keys['d']) posX += 5;
 
-                if (moved) {
-                    posX = Math.max(0, Math.min(posX, 760));
-                    posY = Math.max(0, Math.min(posY, 460));
-                    const pEl = document.getElementById('player');
-                    pEl.style.left = posX + 'px'; pEl.style.top = posY + 'px';
-                    if (playerRef) playerRef.update({ x: posX, y: posY });
-                }
+                const pEl = document.getElementById('player');
+                pEl.style.left = posX + 'px'; pEl.style.top = posY + 'px';
+                if (playerRef) playerRef.update({ x: posX, y: posY });
 
-                // Inimigos seguem o player MAIS PRÓXIMO
-                for (let i = enemies.length - 1; i >= 0; i--) {
-                    const e = enemies[i];
-                    let target = { x: posX, y: posY }; // Alvo padrão é você
+                enemies.forEach(e => {
+                    // SEGUIR O JOGADOR MAIS PRÓXIMO
+                    let target = { x: posX, y: posY };
                     let minDist = Math.hypot(posX - e.x, posY - e.y);
 
-                    // Verifica se algum outro player está mais perto
                     for (let id in allPlayers) {
                         const p = allPlayers[id];
                         const d = Math.hypot(p.x - e.x, p.y - e.y);
-                        if (d < minDist) {
-                            minDist = d;
-                            target = p;
-                        }
+                        if (d < minDist) { minDist = d; target = p; }
                     }
 
                     const angle = Math.atan2(target.y - e.y, target.x - e.x);
                     e.x += Math.cos(angle) * e.speed;
                     e.y += Math.sin(angle) * e.speed;
                     e.el.style.left = e.x + 'px'; e.el.style.top = e.y + 'px';
-
-                    // Dano se encostar em VOCÊ
-                    if (Math.hypot(posX - e.x, posY - e.y) < 30) {
-                        hp -= 0.5;
-                        if (hp <= 0) { isDead = true; document.getElementById('game-over').style.display = 'block'; }
-                    }
-
-                    // Colisão com seus tiros
-                    bullets.forEach((b, bi) => {
-                        if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
-                            e.hp--; b.el.remove(); bullets.splice(bi, 1);
-                            if (e.hp <= 0) {
-                                xp += 20; e.el.remove(); enemies.splice(i, 1);
-                                if (xp >= level * 100) { level++; xp = 0; }
-                            }
-                        }
-                    });
-                }
-
-                // Atualiza tiros
-                for (let i = bullets.length - 1; i >= 0; i--) {
-                    const b = bullets[i];
-                    b.x += b.vx; b.y += b.vy;
-                    b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
-                    if (b.x < -10 || b.x > 810 || b.y < -10 || b.y > 510) {
-                        b.el.remove(); bullets.splice(i, 1);
-                    }
-                }
+                });
             }
-            document.getElementById('hp-bar-fill').style.width = hp + "%";
-            document.getElementById('xp-val').innerText = xp;
-            document.getElementById('lvl-val').innerText = level;
             requestAnimationFrame(gameLoop);
         }
 
-        // Funções de Sala (Botões)
         function createRoom() { connectToRoom(Math.floor(100000 + Math.random() * 900000)); }
-        function joinRoomPrompt() { 
-            const code = prompt("Código da sala:"); 
-            if(code) connectToRoom(code); 
-        }
-
-        board.addEventListener('mousedown', e => {
-            if(!isStarted || isPaused || isDead) return;
-            const rect = board.getBoundingClientRect();
-            const angle = Math.atan2(e.clientY - rect.top - (posY + 20), e.clientX - rect.left - (posX + 20));
-            const bEl = document.createElement('div');
-            bEl.className = 'bullet';
-            board.appendChild(bEl);
-            bullets.push({ el: bEl, x: posX + 16, y: posY + 16, vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10 });
-        });
+        function joinRoomPrompt() { const c = prompt("Código:"); if(c) connectToRoom(c); }
+    </script>
+</body>
+</html>
