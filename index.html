@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Whiter Battle - MULTIPLAYER FIXED</title>
+    <title>Whiter Battle - CO-OP SYSTEM</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
@@ -11,7 +11,6 @@
     <style>
         body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #1a1a2e; overflow: hidden; font-family: sans-serif; }
         
-        /* O MAPA DO JOGO (ÁREA CINZA) */
         #game-board { 
             position: relative; 
             width: 800px; 
@@ -19,44 +18,47 @@
             background-color: #b8b8b8; 
             border: 4px solid #16213e; 
             border-radius: 10px; 
-            overflow: hidden; /* Isso impede o player de sair visualmente da caixa */
+            overflow: hidden; 
             display: none; 
         }
 
-        /* ELEMENTOS DO JOGO */
         #player { position: absolute; width: 40px; height: 40px; background-color: #e94560; border-radius: 8px; z-index: 10; }
         .other-player { position: absolute; width: 40px; height: 40px; background-color: #0077ff; border-radius: 8px; z-index: 9; }
         .enemy { position: absolute; width: 30px; height: 30px; background-color: #2ecc71; border-radius: 5px; z-index: 8; }
         .bullet { position: absolute; width: 10px; height: 10px; background-color: #f9ed69; border-radius: 50%; z-index: 5; }
         .player-name { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: white; font-weight: bold; font-size: 12px; text-shadow: 1px 1px 2px black; white-space: nowrap; }
 
-        /* TELAS E MENUS */
-        #login-screen, #config-panel { position: fixed; inset: 0; background: rgba(26, 26, 46, 0.95); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; }
+        #login-screen, #config-panel { position: fixed; inset: 0; background: rgba(26, 26, 46, 0.98); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; }
         #config-panel { display: none; z-index: 1100; }
-        input { padding: 12px; margin: 10px; border-radius: 8px; border: none; width: 200px; }
-        button { padding: 10px 30px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 5px; }
-        #ui-info { position: absolute; top: 10px; left: 10px; color: white; z-index: 100; display: none; }
+        
+        input { padding: 12px; margin: 10px; border-radius: 8px; border: none; width: 220px; text-align: center; font-size: 16px; }
+        button { padding: 12px 30px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 8px; min-width: 200px; transition: 0.2s; }
+        button:hover { background: #ff5e78; }
+        
+        #ui-info { position: absolute; top: 15px; left: 15px; color: white; z-index: 100; display: none; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border-left: 4px solid #0077ff; }
+        .room-code-tag { color: #f9ed69; font-weight: bold; font-size: 18px; margin-top: 10px; }
     </style>
 </head>
 <body>
 
     <div id="ui-info">
-        <div id="room-text">Sala: Solo</div>
-        <div>HP: <span id="hp-val">100</span> | XP: <span id="xp-val">0</span></div>
+        <div id="room-text">Modo: Solo</div>
+        <div style="margin-top:5px;">HP: <span id="hp-val">100</span> | XP: <span id="xp-val">0</span></div>
     </div>
 
     <div id="login-screen">
-        <h1>WHITER BATTLE</h1>
+        <h1 style="color: #0077ff;">WHITER BATTLE</h1>
         <input type="text" id="username-input" placeholder="Seu nome..." maxlength="12">
-        <button onclick="startGame()">ENTRAR</button>
+        <button onclick="startGame()">INICIAR JOGO</button>
     </div>
 
     <div id="config-panel">
-        <h2 id="pause-title">MENU DE SALA</h2>
-        <button onclick="createRoom()">CRIAR NOVA SALA</button>
-        <button onclick="joinRoomPrompt()">ENTRAR EM SALA</button>
-        <p id="room-display"></p>
-        <p style="font-size: 12px; color: #aaa;">Somente o ADM despausa o jogo.</p>
+        <h2 id="pause-title">MENU CO-OP</h2>
+        <button onclick="createRoom()" style="background: #0077ff;">CRIAR SALA (6 DÍGITOS)</button>
+        <button onclick="joinRoomPrompt()" style="background: #2ecc71;">ENTRAR EM SALA</button>
+        <div id="room-display" class="room-code-tag"></div>
+        <p style="font-size: 13px; color: #ccc; margin-top: 20px;">Aperte ESC para fechar</p>
+        <p style="font-size: 11px; color: #888;">(Somente o ADM pausa/despausa a ação)</p>
     </div>
 
     <div id="game-board">
@@ -92,6 +94,17 @@
             requestAnimationFrame(gameLoop);
         }
 
+        // --- SISTEMA DE SALAS ---
+        function createRoom() {
+            const code = Math.floor(100000 + Math.random() * 900000); // Gera 6 dígitos
+            connectToRoom(code);
+        }
+
+        function joinRoomPrompt() {
+            const code = prompt("Digite o código de 6 dígitos da sala:");
+            if(code && code.length >= 5) connectToRoom(code);
+        }
+
         function connectToRoom(code) {
             if (playerRef) playerRef.remove();
             roomRef = db.ref('rooms/' + code);
@@ -104,8 +117,9 @@
             roomRef.on('value', snap => {
                 const data = snap.val() || {};
                 isPaused = data.isPaused || false;
+                
+                // Interface de Pause
                 document.getElementById('config-panel').style.display = isPaused ? 'flex' : 'none';
-                document.getElementById('pause-title').innerText = isPaused ? "JOGO PAUSADO" : "MENU DE SALA";
                 
                 const players = data.players || {};
                 document.querySelectorAll('.other-player').forEach(el => el.remove());
@@ -122,14 +136,29 @@
                 }
             });
             document.getElementById('room-text').innerText = "Sala: " + code;
-            document.getElementById('room-display').innerText = "CÓDIGO: " + code;
+            document.getElementById('room-display').innerText = "CÓDIGO ATUAL: " + code;
+            isPaused = false; // Garante que começa despausado ao criar/entrar
         }
 
         function togglePause() {
-            if (!isStarted || !roomRef) return;
+            if (!isStarted) return;
+            
+            if (!roomRef) {
+                // Se estiver no Solo, apenas abre/fecha o menu visualmente
+                const panel = document.getElementById('config-panel');
+                isPaused = (panel.style.display !== 'flex');
+                panel.style.display = isPaused ? 'flex' : 'none';
+                return;
+            }
+
             const myName = document.getElementById('my-name-tag').innerText;
+            // Só o ADM "Gusta" altera o estado no Firebase
             if (myName === "Gusta") {
                 roomRef.child('isPaused').set(!isPaused);
+            } else {
+                // Visitantes apenas abrem o menu para ver o código, mas não pausam o mundo
+                const panel = document.getElementById('config-panel');
+                panel.style.display = (panel.style.display === 'flex') ? 'none' : 'flex';
             }
         }
 
@@ -139,6 +168,7 @@
         });
         window.addEventListener('keyup', e => delete keys[e.key.toLowerCase()]);
 
+        // --- LÓGICA DE TIROS E MOVIMENTO ---
         board.addEventListener('mousedown', e => {
             if(!isStarted || isPaused) return;
             const rect = board.getBoundingClientRect();
@@ -150,7 +180,7 @@
         });
 
         function spawnEnemy() {
-            if (enemies.length > 10) return;
+            if (enemies.length > 12 || isPaused) return;
             const el = document.createElement('div');
             el.className = 'enemy';
             let ex = Math.random() > 0.5 ? -30 : 800, ey = Math.random() * 500;
@@ -163,7 +193,6 @@
             if (isStarted && !isPaused) {
                 if (time - lastSpawn > 2000) { spawnEnemy(); lastSpawn = time; }
 
-                // Movimento com trava de borda
                 if (keys['w'] && posY > 0) posY -= 5;
                 if (keys['s'] && posY < 460) posY += 5;
                 if (keys['a'] && posX > 0) posX -= 5;
@@ -173,7 +202,6 @@
                 pEl.style.left = posX + 'px'; pEl.style.top = posY + 'px';
                 if (playerRef) playerRef.update({ x: posX, y: posY });
 
-                // Lógica de Tiros
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     const b = bullets[i];
                     b.x += b.vx; b.y += b.vy;
@@ -183,7 +211,6 @@
                     }
                 }
 
-                // Inimigos Inteligentes
                 enemies.forEach((e, ei) => {
                     let target = { x: posX, y: posY };
                     let minDist = Math.hypot(posX - e.x, posY - e.y);
@@ -196,7 +223,6 @@
                     e.y += Math.sin(angle) * e.speed;
                     e.el.style.left = e.x + 'px'; e.el.style.top = e.y + 'px';
 
-                    // Colisão com tiros
                     bullets.forEach((b, bi) => {
                         if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
                             e.el.remove(); enemies.splice(ei, 1);
@@ -209,9 +235,6 @@
             }
             requestAnimationFrame(gameLoop);
         }
-
-        function createRoom() { connectToRoom(Math.floor(100000 + Math.random() * 900000)); }
-        function joinRoomPrompt() { const c = prompt("Código:"); if(c) connectToRoom(c); }
     </script>
 </body>
 </html>
