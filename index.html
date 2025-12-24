@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whiter Boss - MULTIPLAYER COMPLETO</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+
+    <style>
+        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #1a1a2e; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+        
+        /* TELAS */
+        #login-screen { position: fixed; inset: 0; background: #1a1a2e; z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; }
+        #login-screen input { padding: 12px; font-size: 18px; border-radius: 8px; border: none; margin-bottom: 15px; width: 250px; text-align: center; background: #16213e; color: white; border: 2px solid #0077ff; }
+        #login-screen button { padding: 10px 40px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 18px; }
+
+        #game-board { position: relative; width: 800px; height: 500px; background-color: rgb(184, 184, 184); border: 4px solid #16213e; border-radius: 10px; overflow: hidden; display: none; cursor: crosshair; }
+        
+        /* JOGADORES */
+        #player { position: absolute; width: 40px; height: 40px; background-color: #e94560; border-radius: 8px; z-index: 10; border: 2px solid rgba(255,255,255,0.3); }
+        .other-player { position: absolute; width: 40px; height: 40px; background-color: #0077ff; border-radius: 8px; z-index: 9; border: 2px solid white; transition: 0.1s linear; }
+        .player-name { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: white; font-weight: bold; font-size: 12px; white-space: nowrap; text-shadow: 1px 1px 2px black; pointer-events: none; }
+
+        /* ELEMENTOS DE JOGO */
+        .bullet { position: absolute; width: 8px; height: 8px; background-color: #f9ed69; border-radius: 50%; z-index: 5; pointer-events: none; }
+        .enemy { position: absolute; border-radius: 5px; z-index: 8; }
+        .boss { position: absolute; border-radius: 15px; z-index: 9; background-color: #4b0082; border: 4px solid #ff00ff; box-shadow: 0 0 20px #ff00ff; }
+        
+        /* UI */
+        #ui-stack { position: absolute; top: 15px; left: 15px; z-index: 100; display: none; flex-direction: column; gap: 10px; pointer-events: none; }
+        .ui-box { background: rgba(0,0,0,0.4); padding: 8px; border-radius: 8px; border-left: 4px solid #0077ff; }
+        #hp-bar-bg { width: 180px; height: 15px; background: rgba(0,0,0,0.5); border-radius: 10px; border: 1px solid white; overflow: hidden; }
+        #hp-bar-fill { width: 100%; height: 100%; background: #ff3e3e; }
+        .ui-text-line { color: white; font-size: 14px; font-weight: bold; }
+        
+        #config-panel, #game-over { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(22, 33, 62, 0.98); padding: 25px; border-radius: 20px; z-index: 500; border: 3px solid white; color: white; width: 300px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h1 style="color: #0077ff;">WHITER BATTLE CO-OP</h1>
+        <input type="text" id="username-input" placeholder="Seu nome..." maxlength="12">
+        <button onclick="startGame()">JOGAR</button>
+    </div>
+
+    <div id="ui-stack">
+        <div class="ui-box">
+            <div id="hp-bar-bg"><div id="hp-bar-fill"></div></div>
+            <div class="ui-text-line">XP: <span id="xp-val">0</span> | Nível: <span id="lvl-val">1</span></div>
+            <div id="room-info" class="ui-text-line" style="color: #f9ed69;">Sala: Solo</div>
+        </div>
+    </div>
+
+    <div id="config-panel">
+        <h2>MENU CO-OP</h2>
+        <button onclick="createRoom()" style="width:100%; padding:10px; background:#0077ff; color:white; border:none; margin-bottom:5px; cursor:pointer;">CRIAR SALA</button>
+        <button onclick="joinRoomPrompt()" style="width:100%; padding:10px; background:#2ecc71; color:white; border:none; margin-bottom:10px; cursor:pointer;">ENTRAR EM SALA</button>
+        <div id="room-display" style="color:#f9ed69; margin-bottom:15px;"></div>
+        <button onclick="toggleMenu()" style="width:100%; padding:10px; background:#e94560; border:none; color:white; cursor:pointer;">VOLTAR (ESC)</button>
+    </div>
+
+    <div id="game-over">
+        <h1>GAME OVER</h1>
+        <button onclick="location.reload()" style="padding:10px 20px;">REINICIAR</button>
+    </div>
+
+    <div id="game-board">
+        <div id="player"><div class="player-name" id="my-name-tag"></div></div>
+    </div>
+
+    <script>
+        // CONFIGURAÇÃO FIREBASE (Suas chaves reais)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
+            authDomain: "whitermultiplayer.firebaseapp.com",
+            databaseURL: "https://whitermultiplayer-default-rtdb.firebaseio.com/",
+            projectId: "whitermultiplayer",
+            storageBucket: "whitermultiplayer.firebasestorage.app",
+            messagingSenderId: "859405698218",
+            appId: "1:859405698218:web:44b4d4e4d1a96c93737cd3"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        let playerRef, roomRef, myID;
+
+        // ESTADO DO JOGO
+        const board = document.getElementById('game-board');
+        let posX = 380, posY = 230, hp = 100, maxHp = 100, xp = 0, level = 1;
+        let isPaused = false, isStarted = false, isDead = false;
+        const keys = {}, enemies = [], bullets = [];
+
+        function startGame() {
+            const name = document.getElementById('username-input').value || "Player";
+            document.getElementById('my-name-tag').innerText = name;
+            document.getElementById('login-screen').style.display = 'none';
+            board.style.display = 'block';
+            document.getElementById('ui-stack').style.display = 'flex';
+            isStarted = true;
+            window.lastSpawn = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // MULTIPLAYER LÓGICA
+        function createRoom() {
+            const code = Math.floor(100000 + Math.random() * 900000);
+            connectToRoom(code);
+        }
+
+        function joinRoomPrompt() {
+            const code = prompt("Código da sala:");
+            if(code && code.length === 6) connectToRoom(code);
+        }
+
+        function connectToRoom(code) {
+            if (playerRef) playerRef.remove();
+            roomRef = db.ref('rooms/' + code);
+            playerRef = roomRef.child('players').push();
+            myID = playerRef.key;
+            playerRef.set({ name: document.getElementById('my-name-tag').innerText, x: posX, y: posY });
+            playerRef.onDisconnect().remove();
+            
+            document.getElementById('room-info').innerText = "Sala: " + code;
+            document.getElementById('room-display').innerText = "CÓDIGO: " + code;
+
+            roomRef.child('players').on('value', snapshot => {
+                const players = snapshot.val();
+                document.querySelectorAll('.other-player').forEach(el => el.remove());
+                for (let id in players) {
+                    if (id === myID) continue;
+                    const p = players[id];
+                    const el = document.createElement('div');
+                    el.className = 'other-player';
+                    el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+                    el.innerHTML = `<div class="player-name">${p.name}</div>`;
+                    board.appendChild(el);
+                }
+            });
+            toggleMenu();
+        }
+
+        // COMBATE E MOVIMENTO
+        window.addEventListener('keydown', e => { 
+            keys[e.key.toLowerCase()] = true; 
+            if(e.key === 'Escape') toggleMenu();
+        });
+        window.addEventListener('keyup', e => delete keys[e.key.toLowerCase()]);
+
+        function toggleMenu() {
+            if(!isStarted) return;
+            isPaused = !isPaused;
+            document.getElementById('config-panel').style.display = isPaused ? 'block' : 'none';
+        }
+
+        board.addEventListener('mousedown', e => {
+            if(!isStarted || isPaused || isDead) return;
+            const rect = board.getBoundingClientRect();
+            const angle = Math.atan2(e.clientY - rect.top - (posY + 20), e.clientX - rect.left - (posX + 20));
+            createBullet(posX + 16, posY + 16, angle);
+        });
+
+        function createBullet(x, y, angle) {
+            const bEl = document.createElement('div');
+            bEl.className = 'bullet';
+            board.appendChild(bEl);
+            bullets.push({ el: bEl, x, y, vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10 });
+        }
+
+        function spawnEnemy() {
+            const el = document.createElement('div');
+            el.className = 'enemy';
+            el.style.width = '30px'; el.style.height = '30px'; el.style.backgroundColor = '#2ecc71';
+            let ex = Math.random() > 0.5 ? -40 : 840, ey = Math.random() * 500;
+            board.appendChild(el);
+            enemies.push({ el, x: ex, y: ey, hp: 2, speed: 1.5 + (level * 0.1) });
+        }
+
+        function gameLoop(time) {
+            if (isStarted && !isPaused && !isDead) {
+                // Spawn Inimigos
+                if (time - (window.lastSpawn || 0) > 2000 - (level * 50)) {
+                    spawnEnemy();
+                    window.lastSpawn = time;
+                }
+
+                // Movimento Player
+                let moved = false;
+                if (keys['w']) { posY -= 5; moved = true; }
+                if (keys['s']) { posY += 5; moved = true; }
+                if (keys['a']) { posX -= 5; moved = true; }
+                if (keys['d']) { posX += 5; moved = true; }
+
+                if (moved) {
+                    posX = Math.max(0, Math.min(posX, 760));
+                    posY = Math.max(0, Math.min(posY, 460));
+                    const pEl = document.getElementById('player');
+                    pEl.style.left = posX + 'px'; pEl.style.top = posY + 'px';
+                    if (playerRef) playerRef.update({ x: posX, y: posY });
+                }
+
+                // Tiros
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
+                    b.x += b.vx; b.y += b.vy;
+                    b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
+                    if (b.x < -10 || b.x > 810 || b.y < -10 || b.y > 510) {
+                        b.el.remove(); bullets.splice(i, 1);
+                    }
+                }
+
+                // Inimigos
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const e = enemies[i];
+                    const angle = Math.atan2(posY - e.y, posX - e.x);
+                    e.x += Math.cos(angle) * e.speed;
+                    e.y += Math.sin(angle) * e.speed;
+                    e.el.style.left = e.x + 'px'; e.el.style.top = e.y + 'px';
+
+                    // Dano no player
+                    if (Math.hypot(posX - e.x, posY - e.y) < 30) {
+                        hp -= 0.5;
+                        if (hp <= 0) { isDead = true; document.getElementById('game-over').style.display = 'block'; }
+                    }
+
+                    // Colisão tiro com inimigo
+                    bullets.forEach((b, bi) => {
+                        if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
+                            e.hp--; b.el.remove(); bullets.splice(bi, 1);
+                            if (e.hp <= 0) {
+                                xp += 20; e.el.remove(); enemies.splice(i, 1);
+                                if (xp >= level * 100) { level++; xp = 0; }
+                            }
+                        }
+                    });
+                }
+            }
+            document.getElementById('hp-bar-fill').style.width = hp + "%";
+            document.getElementById('xp-val').innerText = xp;
+            document.getElementById('lvl-val').innerText = level;
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
