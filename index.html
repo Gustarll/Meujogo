@@ -3,59 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Whiter Battle - MULTIPLAYER COMPLETO</title>
+    <title>Whiter Battle - MULTIPLAYER TOTAL</title>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
     <style>
-        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #1a1a2e; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
-        #game-board { position: relative; width: 800px; height: 500px; background-color: #b8b8b8; border: 4px solid #16213e; border-radius: 10px; overflow: hidden; display: none; cursor: crosshair; }
-        #player { position: absolute; width: 40px; height: 40px; background-color: #e94560; border-radius: 8px; z-index: 10; }
-        .other-player { position: absolute; width: 40px; height: 40px; background-color: #0077ff; border-radius: 8px; z-index: 9; }
-        .enemy { position: absolute; width: 30px; height: 30px; background-color: #2ecc71; border-radius: 5px; z-index: 8; }
-        .bullet { position: absolute; width: 10px; height: 10px; background-color: #f9ed69; border-radius: 50%; z-index: 5; }
-        .player-name { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: white; font-weight: bold; font-size: 12px; white-space: nowrap; text-shadow: 1px 1px 2px black; pointer-events: none; }
+        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0f0f1b; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* PAINEL DE CO-OP (ABRE COM ESC) */
-        #login-screen, #config-panel, #game-over { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; color: white; background: rgba(26, 33, 62, 0.98); }
-        #config-panel, #game-over { display: none; }
+        /* CAMPO DE JOGO */
+        #game-board { position: relative; width: 800px; height: 500px; background: #2c3e50; border: 4px solid #34495e; border-radius: 10px; display: none; overflow: hidden; cursor: crosshair; }
         
-        /* UI DO JOGO */
-        #ui-stack { position: absolute; top: 15px; left: 15px; z-index: 100; display: none; flex-direction: column; gap: 5px; }
-        .hp-bar-bg { width: 200px; height: 20px; background: rgba(0,0,0,0.5); border: 2px solid white; border-radius: 10px; overflow: hidden; }
+        /* PERSONAGENS E OBJETOS */
+        #player { position: absolute; width: 40px; height: 40px; background: #e94560; border-radius: 8px; z-index: 10; }
+        .other-player { position: absolute; width: 40px; height: 40px; background: #0077ff; border-radius: 8px; z-index: 9; }
+        .enemy { position: absolute; width: 30px; height: 30px; background: #2ecc71; border-radius: 5px; z-index: 8; }
+        .bullet { position: absolute; width: 10px; height: 10px; background: #f9ed69; border-radius: 50%; z-index: 5; }
+        .player-name { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: white; font-size: 12px; font-weight: bold; white-space: nowrap; text-shadow: 1px 1px 2px black; pointer-events: none; }
+
+        /* PAINEL CO-OP (ESC) - Z-INDEX ALTÍSSIMO */
+        #config-panel { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; color: white; }
+        
+        /* TELAS DE LOGIN E GAME OVER */
+        #login-screen, #game-over { position: fixed; inset: 0; background: #1a1a2e; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; color: white; }
+        #game-over { display: none; background: rgba(255, 0, 0, 0.2); backdrop-filter: blur(5px); }
+
+        /* UI DE STATUS */
+        #ui-stack { position: absolute; top: 15px; left: 15px; z-index: 100; display: none; color: white; }
+        .hp-bar { width: 200px; height: 15px; background: #444; border: 2px solid white; border-radius: 10px; overflow: hidden; margin-bottom: 5px; }
         #hp-fill { width: 100%; height: 100%; background: #ff3e3e; transition: 0.2s; }
-        
-        button { padding: 12px 30px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 10px; min-width: 220px; font-size: 16px; transition: 0.3s; }
-        button:hover { background: #ff5e78; transform: scale(1.05); }
-        input { padding: 12px; font-size: 18px; border-radius: 8px; border: none; margin-bottom: 15px; width: 250px; text-align: center; }
-        .room-tag { color: #f9ed69; font-size: 20px; font-weight: bold; margin: 15px; padding: 10px; border: 2px dashed #f9ed69; background: rgba(0,0,0,0.3); }
+
+        /* BOTÕES E INPUTS */
+        button { padding: 12px 30px; margin: 10px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; min-width: 220px; transition: 0.2s; }
+        button:hover { transform: scale(1.05); background: #ff5e78; }
+        input { padding: 12px; border-radius: 8px; border: none; width: 250px; text-align: center; font-size: 18px; margin-bottom: 10px; }
+        .room-tag { color: #f9ed69; font-size: 20px; font-weight: bold; padding: 10px; border: 2px dashed #f9ed69; margin: 15px; }
     </style>
 </head>
 <body>
 
     <div id="ui-stack">
-        <div class="hp-bar-bg"><div id="hp-fill"></div></div>
-        <div style="font-weight: bold;">XP: <span id="xp-val">0</span> | Nível: <span id="lvl-val">1</span></div>
-        <div id="room-info" style="color: #f9ed69;">Sala: Solo</div>
+        <div class="hp-bar"><div id="hp-fill"></div></div>
+        <div>XP: <span id="xp-val">0</span> | Nível: <span id="lvl-val">1</span></div>
+        <div id="room-info" style="color: #f9ed69; font-size: 12px;">Modo: Solo</div>
     </div>
 
     <div id="login-screen">
-        <h1 style="color: #0077ff; letter-spacing: 2px;">WHITER BATTLE CO-OP</h1>
-        <input type="text" id="username-input" placeholder="Seu nome..." maxlength="12">
-        <button onclick="startGame()">ENTRAR NO JOGO</button>
+        <h1 style="color: #0077ff;">WHITER BATTLE CO-OP</h1>
+        <input type="text" id="username-input" placeholder="Seu apelido..." maxlength="12">
+        <button onclick="startGame()">INICIAR BATALHA</button>
     </div>
 
     <div id="config-panel">
-        <h1 style="color: #f9ed69;">MENU CO-OP</h1>
+        <h1 style="color: #e94560;">MENU CO-OP</h1>
         <button onclick="createRoom()" style="background: #0077ff;">CRIAR SALA (6 DÍGITOS)</button>
-        <button onclick="joinRoomPrompt()" style="background: #2ecc71;">ENTRAR EM SALA EXISTENTE</button>
-        <div id="room-display" class="room-tag">VOCÊ ESTÁ EM MODO SOLO</div>
+        <button onclick="joinRoomPrompt()" style="background: #2ecc71;">ENTRAR EM SALA</button>
+        <div id="room-display" class="room-tag">SALA: SOLO</div>
         <button onclick="toggleMenu()" style="background: #555;">VOLTAR AO JOGO (ESC)</button>
-        <p style="font-size: 12px; color: #888; margin-top: 20px;">Somente o ADM da sala (Gusta) controla o pause global.</p>
     </div>
 
     <div id="game-over">
-        <h1>GAME OVER</h1>
-        <button onclick="location.reload()">REINICIAR JOGO</button>
+        <h1>VOCÊ FOI DERROTADO!</h1>
+        <button onclick="location.reload()">TENTAR NOVAMENTE</button>
     </div>
 
     <div id="game-board">
@@ -63,8 +70,9 @@
     </div>
 
     <script>
+        // CONFIGURAÇÕES FIREBASE
         const firebaseConfig = {
-            apiKey: "AIzaSyDqYWTRKvmy$roomRef", // Note: Seus dados de config estão preservados
+            apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
             authDomain: "whitermultiplayer.firebaseapp.com",
             databaseURL: "https://whitermultiplayer-default-rtdb.firebaseio.com/",
             projectId: "whitermultiplayer",
@@ -72,12 +80,10 @@
             messagingSenderId: "859405698218",
             appId: "1:859405698218:web:44b4d4e4d1a96c93737cd3"
         };
-
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        
         let playerRef, roomRef, myID;
-
-        const board = document.getElementById('game-board');
         let posX = 380, posY = 230, hp = 100, xp = 0, level = 1;
         let isPaused = false, isStarted = false, isDead = false;
         const keys = {}, enemies = [], bullets = [], allPlayers = {};
@@ -86,21 +92,21 @@
             const name = document.getElementById('username-input').value || "Player";
             document.getElementById('my-name-tag').innerText = name;
             document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('ui-stack').style.display = 'flex';
-            board.style.display = 'block';
+            document.getElementById('ui-stack').style.display = 'block';
+            document.getElementById('game-board').style.display = 'block';
             isStarted = true;
             window.lastSpawn = performance.now();
             requestAnimationFrame(gameLoop);
         }
 
-        // --- SISTEMA DE SALAS (O QUE VOCÊ PEDIU) ---
+        // --- SISTEMA DE SALAS (ESC) ---
         function createRoom() {
-            const code = Math.floor(100000 + Math.random() * 900000); // Gera 6 dígitos
+            const code = Math.floor(100000 + Math.random() * 900000);
             connectToRoom(code);
         }
 
         function joinRoomPrompt() {
-            const code = prompt("Digite o código da sala:");
+            const code = prompt("Digite o código de 6 dígitos:");
             if(code) connectToRoom(code);
         }
 
@@ -116,8 +122,8 @@
                 const data = snap.val() || {};
                 isPaused = data.isPaused || false;
                 
-                // Se o ADM pausar, abre o menu para todos
-                document.getElementById('config-panel').style.display = isPaused ? 'flex' : 'none';
+                // Abre o menu para todos se o ADM pausar
+                if(isPaused) document.getElementById('config-panel').style.display = 'flex';
                 
                 const players = data.players || {};
                 document.querySelectorAll('.other-player').forEach(el => el.remove());
@@ -129,56 +135,53 @@
                         el.className = 'other-player';
                         el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
                         el.innerHTML = `<div class="player-name">${p.name}</div>`;
-                        board.appendChild(el);
+                        document.getElementById('game-board').appendChild(el);
                     }
                 }
             });
             document.getElementById('room-info').innerText = "Sala: " + code;
-            document.getElementById('room-display').innerText = "CÓDIGO ATUAL: " + code;
-            toggleMenu(); // Fecha o menu automaticamente após entrar na sala
+            document.getElementById('room-display').innerText = "SALA: " + code;
+            toggleMenu(); 
         }
 
         function toggleMenu() {
             if (!isStarted) return;
             const panel = document.getElementById('config-panel');
             const isShowing = (panel.style.display === 'flex');
-            
-            // Abre/Fecha na tela do jogador
             panel.style.display = isShowing ? 'none' : 'flex';
             
-            // Lógica de Pause Global (Apenas para o Gusta)
             const myName = document.getElementById('my-name-tag').innerText;
             if (roomRef && myName === "Gusta") {
                 roomRef.child('isPaused').set(!isShowing);
             } else if (!roomRef) {
-                // Se estiver jogando sozinho, pausa o jogo localmente
                 isPaused = !isShowing;
             }
         }
 
-        // --- ENTRADAS E COMBATE (MANTIDO IGUAL) ---
-        window.addEventListener('keydown', e => { 
+        // --- INPUTS ---
+        document.addEventListener('keydown', e => { 
             keys[e.key.toLowerCase()] = true; 
-            if(e.key === 'escape') toggleMenu();
+            if(e.key === 'Escape') { e.preventDefault(); toggleMenu(); }
         });
-        window.addEventListener('keyup', e => delete keys[e.key.toLowerCase()]);
+        document.addEventListener('keyup', e => delete keys[e.key.toLowerCase()]);
 
-        board.addEventListener('mousedown', e => {
+        document.getElementById('game-board').addEventListener('mousedown', e => {
             if(!isStarted || isPaused || isDead) return;
-            const rect = board.getBoundingClientRect();
+            const rect = document.getElementById('game-board').getBoundingClientRect();
             const angle = Math.atan2(e.clientY - rect.top - (posY + 20), e.clientX - rect.left - (posX + 20));
             const bEl = document.createElement('div');
             bEl.className = 'bullet';
-            board.appendChild(bEl);
+            document.getElementById('game-board').appendChild(bEl);
             bullets.push({ el: bEl, x: posX + 15, y: posY + 15, vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10 });
         });
 
+        // --- LÓGICA DO JOGO ---
         function spawnEnemy() {
             if (enemies.length > 15 || isPaused) return;
             const el = document.createElement('div');
             el.className = 'enemy';
             let ex = Math.random() > 0.5 ? -30 : 800, ey = Math.random() * 500;
-            board.appendChild(el);
+            document.getElementById('game-board').appendChild(el);
             enemies.push({ el, x: ex, y: ey, speed: 1.5 + (level * 0.1) });
         }
 
@@ -189,7 +192,6 @@
                     window.lastSpawn = time;
                 }
 
-                // Movimento com trava nas bordas
                 if (keys['w'] && posY > 0) posY -= 5;
                 if (keys['s'] && posY < 460) posY += 5;
                 if (keys['a'] && posX > 0) posX -= 5;
@@ -199,7 +201,7 @@
                 pEl.style.left = posX + 'px'; pEl.style.top = posY + 'px';
                 if (playerRef) playerRef.update({ x: posX, y: posY });
 
-                // Movimento dos tiros
+                // Balas
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     const b = bullets[i];
                     b.x += b.vx; b.y += b.vy;
@@ -209,7 +211,7 @@
                     }
                 }
 
-                // Inimigos Inteligentes
+                // Inimigos
                 enemies.forEach((e, ei) => {
                     let target = { x: posX, y: posY };
                     let minDist = Math.hypot(posX - e.x, posY - e.y);
@@ -222,13 +224,11 @@
                     e.y += Math.sin(angle) * e.speed;
                     e.el.style.left = e.x + 'px'; e.el.style.top = e.y + 'px';
 
-                    // Dano
                     if (Math.hypot(posX - e.x, posY - e.y) < 30) {
                         hp -= 0.5;
                         if (hp <= 0) { isDead = true; document.getElementById('game-over').style.display = 'flex'; }
                     }
 
-                    // Colisão com tiros e XP
                     bullets.forEach((b, bi) => {
                         if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
                             e.el.remove(); enemies.splice(ei, 1);
