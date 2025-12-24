@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Whiter Battle - CO-OP SYSTEM</title>
+    <title>Whiter Battle - MULTIPLAYER FINAL</title>
     
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
@@ -11,6 +11,7 @@
     <style>
         body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #1a1a2e; overflow: hidden; font-family: sans-serif; }
         
+        /* CAMPO DE BATALHA */
         #game-board { 
             position: relative; 
             width: 800px; 
@@ -22,21 +23,22 @@
             display: none; 
         }
 
-        #player { position: absolute; width: 40px; height: 40px; background-color: #e94560; border-radius: 8px; z-index: 10; }
+        /* OBJETOS */
+        #player { position: absolute; width: 40px; height: 40px; background-color: #e94560; border-radius: 8px; z-index: 10; transition: 0.05s; }
         .other-player { position: absolute; width: 40px; height: 40px; background-color: #0077ff; border-radius: 8px; z-index: 9; }
         .enemy { position: absolute; width: 30px; height: 30px; background-color: #2ecc71; border-radius: 5px; z-index: 8; }
         .bullet { position: absolute; width: 10px; height: 10px; background-color: #f9ed69; border-radius: 50%; z-index: 5; }
         .player-name { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: white; font-weight: bold; font-size: 12px; text-shadow: 1px 1px 2px black; white-space: nowrap; }
 
+        /* INTERFACE */
         #login-screen, #config-panel { position: fixed; inset: 0; background: rgba(26, 26, 46, 0.98); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; }
         #config-panel { display: none; z-index: 1100; }
         
         input { padding: 12px; margin: 10px; border-radius: 8px; border: none; width: 220px; text-align: center; font-size: 16px; }
-        button { padding: 12px 30px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 8px; min-width: 200px; transition: 0.2s; }
-        button:hover { background: #ff5e78; }
+        button { padding: 12px 30px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 8px; min-width: 200px; }
         
-        #ui-info { position: absolute; top: 15px; left: 15px; color: white; z-index: 100; display: none; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; border-left: 4px solid #0077ff; }
-        .room-code-tag { color: #f9ed69; font-weight: bold; font-size: 18px; margin-top: 10px; }
+        #ui-info { position: absolute; top: 15px; left: 15px; color: white; z-index: 100; display: none; background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; }
+        .room-code-tag { color: #f9ed69; font-weight: bold; font-size: 20px; margin: 15px 0; border: 2px dashed #f9ed69; padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -49,16 +51,16 @@
     <div id="login-screen">
         <h1 style="color: #0077ff;">WHITER BATTLE</h1>
         <input type="text" id="username-input" placeholder="Seu nome..." maxlength="12">
-        <button onclick="startGame()">INICIAR JOGO</button>
+        <button onclick="startGame()">INICIAR</button>
     </div>
 
     <div id="config-panel">
         <h2 id="pause-title">MENU CO-OP</h2>
         <button onclick="createRoom()" style="background: #0077ff;">CRIAR SALA (6 DÍGITOS)</button>
         <button onclick="joinRoomPrompt()" style="background: #2ecc71;">ENTRAR EM SALA</button>
-        <div id="room-display" class="room-code-tag"></div>
-        <p style="font-size: 13px; color: #ccc; margin-top: 20px;">Aperte ESC para fechar</p>
-        <p style="font-size: 11px; color: #888;">(Somente o ADM pausa/despausa a ação)</p>
+        <div id="room-display" class="room-code-tag">CÓDIGO: ------</div>
+        <button onclick="togglePause()" style="background: #555;">VOLTAR AO JOGO (ESC)</button>
+        <p style="font-size: 11px; color: #888; margin-top: 20px;">Somente "Gusta" controla o pause global da sala.</p>
     </div>
 
     <div id="game-board">
@@ -94,15 +96,15 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // --- SISTEMA DE SALAS ---
+        // --- SISTEMA DE CO-OP CORRIGIDO ---
         function createRoom() {
-            const code = Math.floor(100000 + Math.random() * 900000); // Gera 6 dígitos
+            const code = Math.floor(100000 + Math.random() * 900000); 
             connectToRoom(code);
         }
 
         function joinRoomPrompt() {
-            const code = prompt("Digite o código de 6 dígitos da sala:");
-            if(code && code.length >= 5) connectToRoom(code);
+            const code = prompt("Digite o código da sala:");
+            if(code) connectToRoom(code);
         }
 
         function connectToRoom(code) {
@@ -118,7 +120,7 @@
                 const data = snap.val() || {};
                 isPaused = data.isPaused || false;
                 
-                // Interface de Pause
+                // Sincroniza o menu visual de pause
                 document.getElementById('config-panel').style.display = isPaused ? 'flex' : 'none';
                 
                 const players = data.players || {};
@@ -136,39 +138,36 @@
                 }
             });
             document.getElementById('room-text').innerText = "Sala: " + code;
-            document.getElementById('room-display').innerText = "CÓDIGO ATUAL: " + code;
-            isPaused = false; // Garante que começa despausado ao criar/entrar
+            document.getElementById('room-display').innerText = "CÓDIGO: " + code;
         }
 
         function togglePause() {
             if (!isStarted) return;
-            
-            if (!roomRef) {
-                // Se estiver no Solo, apenas abre/fecha o menu visualmente
-                const panel = document.getElementById('config-panel');
-                isPaused = (panel.style.display !== 'flex');
-                panel.style.display = isPaused ? 'flex' : 'none';
-                return;
-            }
-
+            const panel = document.getElementById('config-panel');
             const myName = document.getElementById('my-name-tag').innerText;
-            // Só o ADM "Gusta" altera o estado no Firebase
-            if (myName === "Gusta") {
-                roomRef.child('isPaused').set(!isPaused);
+
+            // Abre o menu visual para quem clicou
+            const isShowing = (panel.style.display === 'flex');
+            panel.style.display = isShowing ? 'none' : 'flex';
+
+            if (roomRef) {
+                // Se for o Gusta, pausa o jogo para todos no Firebase
+                if (myName === "Gusta") {
+                    roomRef.child('isPaused').set(!isPaused);
+                }
             } else {
-                // Visitantes apenas abrem o menu para ver o código, mas não pausam o mundo
-                const panel = document.getElementById('config-panel');
-                panel.style.display = (panel.style.display === 'flex') ? 'none' : 'flex';
+                // Modo solo: pausa localmente
+                isPaused = !isShowing;
             }
         }
 
+        // --- ENTRADAS ---
         window.addEventListener('keydown', e => { 
             keys[e.key.toLowerCase()] = true; 
             if(e.key === 'escape') togglePause();
         });
         window.addEventListener('keyup', e => delete keys[e.key.toLowerCase()]);
 
-        // --- LÓGICA DE TIROS E MOVIMENTO ---
         board.addEventListener('mousedown', e => {
             if(!isStarted || isPaused) return;
             const rect = board.getBoundingClientRect();
@@ -179,8 +178,9 @@
             bullets.push({ el: bEl, x: posX + 15, y: posY + 15, vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10 });
         });
 
+        // --- LÓGICA DO JOGO ---
         function spawnEnemy() {
-            if (enemies.length > 12 || isPaused) return;
+            if (enemies.length > 10 || isPaused) return;
             const el = document.createElement('div');
             el.className = 'enemy';
             let ex = Math.random() > 0.5 ? -30 : 800, ey = Math.random() * 500;
@@ -202,6 +202,7 @@
                 pEl.style.left = posX + 'px'; pEl.style.top = posY + 'px';
                 if (playerRef) playerRef.update({ x: posX, y: posY });
 
+                // Tiros
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     const b = bullets[i];
                     b.x += b.vx; b.y += b.vy;
@@ -211,6 +212,7 @@
                     }
                 }
 
+                // Inimigos Inteligentes (Seguem o mais perto)
                 enemies.forEach((e, ei) => {
                     let target = { x: posX, y: posY };
                     let minDist = Math.hypot(posX - e.x, posY - e.y);
@@ -223,6 +225,7 @@
                     e.y += Math.sin(angle) * e.speed;
                     e.el.style.left = e.x + 'px'; e.el.style.top = e.y + 'px';
 
+                    // Colisão com tiros
                     bullets.forEach((b, bi) => {
                         if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
                             e.el.remove(); enemies.splice(ei, 1);
