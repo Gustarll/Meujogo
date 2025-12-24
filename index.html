@@ -3,37 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Whiter Battle - MULTIPLAYER TOTAL</title>
+    <title>Whiter Battle - Background Sync</title>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
     <style>
-        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0f0f1b; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        
-        /* CAMPO DE JOGO */
+        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0f0f1b; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
         #game-board { position: relative; width: 800px; height: 500px; background: #2c3e50; border: 4px solid #34495e; border-radius: 10px; display: none; overflow: hidden; cursor: crosshair; }
-        
-        /* PERSONAGENS E OBJETOS */
         #player { position: absolute; width: 40px; height: 40px; background: #e94560; border-radius: 8px; z-index: 10; }
         .other-player { position: absolute; width: 40px; height: 40px; background: #0077ff; border-radius: 8px; z-index: 9; }
         .enemy { position: absolute; width: 30px; height: 30px; background: #2ecc71; border-radius: 5px; z-index: 8; }
         .bullet { position: absolute; width: 10px; height: 10px; background: #f9ed69; border-radius: 50%; z-index: 5; }
         .player-name { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: white; font-size: 12px; font-weight: bold; white-space: nowrap; text-shadow: 1px 1px 2px black; pointer-events: none; }
-
-        /* PAINEL CO-OP (ESC) - Z-INDEX ALTÍSSIMO */
         #config-panel { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; color: white; }
-        
-        /* TELAS DE LOGIN E GAME OVER */
         #login-screen, #game-over { position: fixed; inset: 0; background: #1a1a2e; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; color: white; }
         #game-over { display: none; background: rgba(255, 0, 0, 0.2); backdrop-filter: blur(5px); }
-
-        /* UI DE STATUS */
         #ui-stack { position: absolute; top: 15px; left: 15px; z-index: 100; display: none; color: white; }
         .hp-bar { width: 200px; height: 15px; background: #444; border: 2px solid white; border-radius: 10px; overflow: hidden; margin-bottom: 5px; }
         #hp-fill { width: 100%; height: 100%; background: #ff3e3e; transition: 0.2s; }
-
-        /* BOTÕES E INPUTS */
-        button { padding: 12px 30px; margin: 10px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; min-width: 220px; transition: 0.2s; }
-        button:hover { transform: scale(1.05); background: #ff5e78; }
+        button { padding: 12px 30px; margin: 10px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; min-width: 220px; }
         input { padding: 12px; border-radius: 8px; border: none; width: 250px; text-align: center; font-size: 18px; margin-bottom: 10px; }
         .room-tag { color: #f9ed69; font-size: 20px; font-weight: bold; padding: 10px; border: 2px dashed #f9ed69; margin: 15px; }
     </style>
@@ -70,7 +57,6 @@
     </div>
 
     <script>
-        // CONFIGURAÇÕES FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
             authDomain: "whitermultiplayer.firebaseapp.com",
@@ -99,7 +85,8 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // --- SISTEMA DE SALAS (ESC) ---
+        // REMOVIDO: qualquer evento de window.onblur ou focus que causava pause automático.
+
         function createRoom() {
             const code = Math.floor(100000 + Math.random() * 900000);
             connectToRoom(code);
@@ -121,8 +108,6 @@
             roomRef.on('value', snap => {
                 const data = snap.val() || {};
                 isPaused = data.isPaused || false;
-                
-                // Abre o menu para todos se o ADM pausar
                 if(isPaused) document.getElementById('config-panel').style.display = 'flex';
                 
                 const players = data.players || {};
@@ -158,7 +143,6 @@
             }
         }
 
-        // --- INPUTS ---
         document.addEventListener('keydown', e => { 
             keys[e.key.toLowerCase()] = true; 
             if(e.key === 'Escape') { e.preventDefault(); toggleMenu(); }
@@ -175,7 +159,6 @@
             bullets.push({ el: bEl, x: posX + 15, y: posY + 15, vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10 });
         });
 
-        // --- LÓGICA DO JOGO ---
         function spawnEnemy() {
             if (enemies.length > 15 || isPaused) return;
             const el = document.createElement('div');
@@ -201,7 +184,6 @@
                 pEl.style.left = posX + 'px'; pEl.style.top = posY + 'px';
                 if (playerRef) playerRef.update({ x: posX, y: posY });
 
-                // Balas
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     const b = bullets[i];
                     b.x += b.vx; b.y += b.vy;
@@ -211,7 +193,6 @@
                     }
                 }
 
-                // Inimigos
                 enemies.forEach((e, ei) => {
                     let target = { x: posX, y: posY };
                     let minDist = Math.hypot(posX - e.x, posY - e.y);
