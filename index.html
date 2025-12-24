@@ -15,9 +15,9 @@
 
         // ESTADO DO JOGO
         const board = document.getElementById('game-board');
-        let posX = 380, posY = 230, hp = 100, maxHp = 100, xp = 0, level = 1;
+        let posX = 380, posY = 230, hp = 100, xp = 0, level = 1;
         let isPaused = false, isStarted = false, isDead = false;
-        const keys = {}, enemies = [], bullets = [];
+        const keys = {}, enemies = [], bullets = [], allPlayers = {};
 
         function startGame() {
             const name = document.getElementById('username-input').value || "Player";
@@ -30,87 +30,62 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // MULTIPLAYER LÓGICA
         function connectToRoom(code) {
             if (playerRef) playerRef.remove();
             roomRef = db.ref('rooms/' + code);
             playerRef = roomRef.child('players').push();
             myID = playerRef.key;
             
-            const myName = document.getElementById('my-name-tag').innerText;
-            playerRef.set({ name: myName, x: posX, y: posY });
+            playerRef.set({ name: document.getElementById('my-name-tag').innerText, x: posX, y: posY });
             playerRef.onDisconnect().remove();
             
-            // ESCUTAR PAUSE GLOBAL
-            roomRef.child('isPaused').on('value', snapshot => {
-                isPaused = snapshot.val() || false;
+            // SINCRONIZAÇÃO DE PAUSE E JOGADORES
+            roomRef.on('value', snapshot => {
+                const data = snapshot.val() || {};
+                isPaused = data.isPaused || false;
                 document.getElementById('config-panel').style.display = isPaused ? 'block' : 'none';
+                
+                // Atualiza lista de todos os jogadores para os inimigos seguirem
+                const players = data.players || {};
+                document.querySelectorAll('.other-player').forEach(el => el.remove());
+                for (let id in players) {
+                    allPlayers[id] = players[id]; // Guarda posições
+                    if (id !== myID) {
+                        const p = players[id];
+                        const el = document.createElement('div');
+                        el.className = 'other-player';
+                        el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+                        el.innerHTML = `<div class="player-name">${p.name}</div>`;
+                        board.appendChild(el);
+                    }
+                }
             });
 
             document.getElementById('room-info').innerText = "Sala: " + code;
             document.getElementById('room-display').innerText = "CÓDIGO: " + code;
-
-            roomRef.child('players').on('value', snapshot => {
-                const players = snapshot.val();
-                document.querySelectorAll('.other-player').forEach(el => el.remove());
-                for (let id in players) {
-                    if (id === myID) continue;
-                    const p = players[id];
-                    const el = document.createElement('div');
-                    el.className = 'other-player';
-                    el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
-                    el.innerHTML = `<div class="player-name">${p.name}</div>`;
-                    board.appendChild(el);
-                }
-            });
+            toggleMenu(false); // Fecha menu ao entrar
         }
 
-        // CONTROLE DE PAUSE (SOMENTE ADM)
-        function toggleMenu() {
+        function toggleMenu(forceState = null) {
             if(!isStarted) return;
-            
             const myName = document.getElementById('my-name-tag').innerText;
             
-            // Apenas o jogador com nome "Gusta" pode controlar o pause global
-            // Mude "Gusta" para o nome que você usa no jogo
+            // SÓ O ADM "Gusta" controla o pause da sala
             if (myName === "Gusta" && roomRef) {
-                roomRef.child('isPaused').set(!isPaused);
+                let newState = (forceState !== null) ? forceState : !isPaused;
+                roomRef.child('isPaused').set(newState);
             } else if (!roomRef) {
-                // Se estiver jogando Solo, o pause funciona normal
                 isPaused = !isPaused;
                 document.getElementById('config-panel').style.display = isPaused ? 'block' : 'none';
             }
         }
 
-        function createRoom() {
-            const code = Math.floor(100000 + Math.random() * 900000);
-            connectToRoom(code);
-        }
-
-        function joinRoomPrompt() {
-            const code = prompt("Código da sala:");
-            if(code && code.length === 6) connectToRoom(code);
-        }
-
+        // --- LÓGICA DE INIMIGOS E MOVIMENTO ---
         window.addEventListener('keydown', e => { 
             keys[e.key.toLowerCase()] = true; 
-            if(e.key === 'Escape') toggleMenu();
+            if(e.key === 'escape') toggleMenu();
         });
         window.addEventListener('keyup', e => delete keys[e.key.toLowerCase()]);
-
-        board.addEventListener('mousedown', e => {
-            if(!isStarted || isPaused || isDead) return;
-            const rect = board.getBoundingClientRect();
-            const angle = Math.atan2(e.clientY - rect.top - (posY + 20), e.clientX - rect.left - (posX + 20));
-            createBullet(posX + 16, posY + 16, angle);
-        });
-
-        function createBullet(x, y, angle) {
-            const bEl = document.createElement('div');
-            bEl.className = 'bullet';
-            board.appendChild(bEl);
-            bullets.push({ el: bEl, x, y, vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10 });
-        }
 
         function spawnEnemy() {
             const el = document.createElement('div');
@@ -128,6 +103,7 @@
                     window.lastSpawn = time;
                 }
 
+                // Movimento Local
                 let moved = false;
                 if (keys['w']) { posY -= 5; moved = true; }
                 if (keys['s']) { posY += 5; moved = true; }
@@ -142,27 +118,34 @@
                     if (playerRef) playerRef.update({ x: posX, y: posY });
                 }
 
-                for (let i = bullets.length - 1; i >= 0; i--) {
-                    const b = bullets[i];
-                    b.x += b.vx; b.y += b.vy;
-                    b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
-                    if (b.x < -10 || b.x > 810 || b.y < -10 || b.y > 510) {
-                        b.el.remove(); bullets.splice(i, 1);
-                    }
-                }
-
+                // Inimigos seguem o player MAIS PRÓXIMO
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     const e = enemies[i];
-                    const angle = Math.atan2(posY - e.y, posX - e.x);
+                    let target = { x: posX, y: posY }; // Alvo padrão é você
+                    let minDist = Math.hypot(posX - e.x, posY - e.y);
+
+                    // Verifica se algum outro player está mais perto
+                    for (let id in allPlayers) {
+                        const p = allPlayers[id];
+                        const d = Math.hypot(p.x - e.x, p.y - e.y);
+                        if (d < minDist) {
+                            minDist = d;
+                            target = p;
+                        }
+                    }
+
+                    const angle = Math.atan2(target.y - e.y, target.x - e.x);
                     e.x += Math.cos(angle) * e.speed;
                     e.y += Math.sin(angle) * e.speed;
                     e.el.style.left = e.x + 'px'; e.el.style.top = e.y + 'px';
 
+                    // Dano se encostar em VOCÊ
                     if (Math.hypot(posX - e.x, posY - e.y) < 30) {
                         hp -= 0.5;
                         if (hp <= 0) { isDead = true; document.getElementById('game-over').style.display = 'block'; }
                     }
 
+                    // Colisão com seus tiros
                     bullets.forEach((b, bi) => {
                         if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
                             e.hp--; b.el.remove(); bullets.splice(bi, 1);
@@ -173,9 +156,36 @@
                         }
                     });
                 }
+
+                // Atualiza tiros
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
+                    b.x += b.vx; b.y += b.vy;
+                    b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
+                    if (b.x < -10 || b.x > 810 || b.y < -10 || b.y > 510) {
+                        b.el.remove(); bullets.splice(i, 1);
+                    }
+                }
             }
             document.getElementById('hp-bar-fill').style.width = hp + "%";
             document.getElementById('xp-val').innerText = xp;
             document.getElementById('lvl-val').innerText = level;
             requestAnimationFrame(gameLoop);
         }
+
+        // Funções de Sala (Botões)
+        function createRoom() { connectToRoom(Math.floor(100000 + Math.random() * 900000)); }
+        function joinRoomPrompt() { 
+            const code = prompt("Código da sala:"); 
+            if(code) connectToRoom(code); 
+        }
+
+        board.addEventListener('mousedown', e => {
+            if(!isStarted || isPaused || isDead) return;
+            const rect = board.getBoundingClientRect();
+            const angle = Math.atan2(e.clientY - rect.top - (posY + 20), e.clientX - rect.left - (posX + 20));
+            const bEl = document.createElement('div');
+            bEl.className = 'bullet';
+            board.appendChild(bEl);
+            bullets.push({ el: bEl, x: posX + 16, y: posY + 16, vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10 });
+        });
