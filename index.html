@@ -2,13 +2,13 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>GAME SHOT</title>
+    <title>GAME SHOT - WASD</title>
     <style>
         body { margin: 0; background: #222; color: white; font-family: sans-serif; overflow: hidden; }
         #menu { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 10; }
         canvas { display: block; background: #333; cursor: crosshair; }
-        .btn { padding: 15px 30px; margin: 10px; cursor: pointer; background: #e74c3c; border: none; color: white; font-weight: bold; }
-        input { padding: 10px; font-size: 1.2rem; text-align: center; width: 150px; }
+        .btn { padding: 15px 30px; margin: 10px; cursor: pointer; background: #e74c3c; border: none; color: white; font-weight: bold; border-radius: 5px; }
+        input { padding: 10px; font-size: 1.2rem; text-align: center; width: 150px; border-radius: 5px; border: none; }
     </style>
 </head>
 <body>
@@ -32,7 +32,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // Suas configurações extraídas da imagem
     const firebaseConfig = {
         apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
         authDomain: "whitermultiplayer.firebaseapp.com",
@@ -40,31 +39,46 @@
         projectId: "whitermultiplayer",
         storageBucket: "whitermultiplayer.firebasestorage.app",
         messagingSenderId: "859405698218",
-        appId: "1:859405698218:web:44b4d4e1a96c937373cd3",
-        measurementId: "G-HQ5JZV5NS3"
+        appId: "1:859405698218:web:44b4d4e1a96c937373cd3"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Variáveis do Jogo
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    let player = { x: 100, y: 100, color: 'blue', lastShot: 0 };
-    let enemy = { x: -100, y: -100, color: 'red' };
+    // Estado do Jogador
+    let player = { 
+        x: 300, y: 300, radius: 20, color: '#3498db', 
+        angle: 0, lastShot: 0, speed: 5 
+    };
+    let enemy = { x: -100, y: -100, radius: 20, color: '#e74c3c', angle: 0 };
+    let keys = {};
     let roomId = null;
     let isPlayer1 = false;
+    let mousePos = { x: 0, y: 0 };
 
-    // --- LÓGICA DE SALAS ---
+    // Controles WASD
+    window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+    window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+    window.addEventListener('mousemove', (e) => {
+        mousePos.x = e.clientX;
+        mousePos.y = e.clientY;
+    });
+
+    // Funções de Sala (Firebase)
     window.createRoom = function() {
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         roomId = code;
         isPlayer1 = true;
-        set(ref(db, 'rooms/' + roomId), { p1: { x: 100, y: 100 }, status: 'waiting' });
-        document.getElementById('status').innerText = "Código da Sala: " + code;
+        set(ref(db, 'rooms/' + roomId), { 
+            p1: { x: 200, y: 300, angle: 0 }, 
+            status: 'waiting' 
+        });
+        document.getElementById('status').innerText = "Código: " + code + " (Aguardando...)";
         observeRoom();
     };
 
@@ -73,8 +87,10 @@
         if(code.length === 6) {
             roomId = code;
             isPlayer1 = false;
-            update(ref(db, 'rooms/' + roomId), { p2: { x: 500, y: 500 }, status: 'playing' });
-            document.getElementById('menu').style.display = 'none';
+            update(ref(db, 'rooms/' + roomId), { 
+                p2: { x: 600, y: 300, angle: 0 }, 
+                status: 'playing' 
+            });
             observeRoom();
         }
     };
@@ -82,55 +98,83 @@
     function observeRoom() {
         onValue(ref(db, 'rooms/' + roomId), (snapshot) => {
             const data = snapshot.val();
+            if(!data) return;
             if(data.status === 'playing') document.getElementById('menu').style.display = 'none';
             if(isPlayer1 && data.p2) enemy = data.p2;
             if(!isPlayer1 && data.p1) enemy = data.p1;
         });
     }
 
-    // --- LÓGICA DO JOGO ---
-    window.addEventListener('mousemove', (e) => {
-        if(!roomId) return;
-        player.x = e.clientX;
-        player.y = e.clientY;
-        
-        // Atualiza posição no Firebase
-        const path = isPlayer1 ? `rooms/${roomId}/p1` : `rooms/${roomId}/p2`;
-        update(ref(db, path), { x: player.x, y: player.y });
-    });
-
-    window.addEventListener('click', () => {
+    // Tiro Instantâneo
+    window.addEventListener('mousedown', () => {
         const agora = Date.now();
-        if(agora - player.lastShot > 500) { // Delay de 0.5s
-            console.log("TIRO!");
+        if(agora - player.lastShot > 500) { // Delay 0.5s
             player.lastShot = agora;
-            // Aqui entra a lógica de raio (raycasting) para acertar o inimigo
+            checkHit();
         }
     });
 
-    function draw() {
+    function checkHit() {
+        // Lógica simples de colisão do tiro (Raio)
+        console.log("Fogo!");
+        // Em um projeto real, aqui enviamos o evento de "dano" para o Firebase
+    }
+
+    function updatePhysics() {
+        if (document.getElementById('menu').style.display !== 'none' && roomId !== "training") return;
+
+        // Movimento WASD
+        if (keys['w']) player.y -= player.speed;
+        if (keys['s']) player.y += player.speed;
+        if (keys['a']) player.x -= player.speed;
+        if (keys['d']) player.x += player.speed;
+
+        // Ângulo da Arma (Olhando para o Mouse)
+        player.angle = Math.atan2(mousePos.y - player.y, mousePos.x - player.x);
+
+        // Enviar para Firebase
+        if (roomId && roomId !== "training") {
+            const path = isPlayer1 ? `rooms/${roomId}/p1` : `rooms/${roomId}/p2`;
+            update(ref(db, path), { x: player.x, y: player.y, angle: player.angle });
+        }
+    }
+
+    function drawEntity(x, y, angle, color) {
+        // Desenha a Arma (Palito)
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.fillStyle = "#7f8c8d";
+        ctx.fillRect(10, -3, 30, 6); // O palito
+        ctx.restore();
+
+        // Desenha o Boneco (Bolinha)
+        ctx.beginPath();
+        ctx.arc(x, y, 20, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    function loop() {
+        updatePhysics();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Desenha Jogador
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, 20, 0, Math.PI*2);
-        ctx.fillStyle = player.color;
-        ctx.fill();
+        // Desenha Jogador e Inimigo
+        drawEntity(player.x, player.y, player.angle, player.color);
+        if(roomId) drawEntity(enemy.x, enemy.y, enemy.angle, '#e74c3c');
 
-        // Desenha Inimigo
-        ctx.beginPath();
-        ctx.arc(enemy.x, enemy.y, 20, 0, Math.PI*2);
-        ctx.fillStyle = enemy.color;
-        ctx.fill();
-
-        requestAnimationFrame(draw);
+        requestAnimationFrame(loop);
     }
-    draw();
 
     window.startTraining = () => {
         document.getElementById('menu').style.display = 'none';
-        roomId = "training"; // Simula modo offline
+        roomId = "training";
     };
+
+    loop();
 </script>
 </body>
 </html>
