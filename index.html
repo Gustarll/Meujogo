@@ -8,31 +8,27 @@
         :root { --primary: #00d2ff; --bg: #0f172a; --glass: rgba(30, 41, 59, 0.7); }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: white; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         
-        /* Barra Lateral */
         .sidebar { width: 350px; background: rgba(0,0,0,0.4); padding: 20px; border-right: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 15px; overflow-y: auto; backdrop-filter: blur(10px); }
         .sidebar h3 { color: var(--primary); margin: 0; font-size: 18px; border-bottom: 1px solid rgba(0,210,255,0.3); padding-bottom: 10px; }
         
-        /* Listas de Seleção */
         .list-container { background: rgba(0,0,0,0.3); border-radius: 10px; border: 1px solid #334155; max-height: 180px; overflow-y: auto; margin-top: 5px; }
         .list-item { padding: 10px; cursor: pointer; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05); transition: 0.2s; display: flex; align-items: center; }
         .list-item:hover { background: var(--primary); color: #000; font-weight: bold; }
         .list-item.active { background: #3a7bd5; color: white; }
 
-        /* Inputs e Botões */
         .group { display: flex; flex-direction: column; gap: 5px; }
         label { font-size: 10px; text-transform: uppercase; color: #94a3b8; font-weight: bold; }
-        input, textarea { background: var(--glass); border: 1px solid #334155; border-radius: 8px; color: white; padding: 10px; font-size: 13px; outline: none; }
+        input, textarea { background: var(--glass); border: 1px solid #334155; border-radius: 8px; color: white; padding: 10px; font-size: 13px; outline: none; width: 100%; box-sizing: border-box; }
         
         .btn { cursor: pointer; border: none; border-radius: 8px; font-weight: bold; padding: 12px; transition: 0.3s; width: 100%; }
         .btn-load { background: #5865F2; color: white; margin-bottom: 10px; }
         .btn-send { background: linear-gradient(to right, #00d2ff, #3a7bd5); color: white; font-size: 16px; margin-top: 20px; }
-        .btn:hover { filter: brightness(1.2); transform: scale(1.02); }
+        .btn:hover { filter: brightness(1.2); transform: scale(1.01); }
 
-        /* Área Principal */
         .main { flex: 1; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #1e293b 0%, #0f172a 100%); position: relative; }
         .card { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); padding: 35px; border-radius: 20px; width: 450px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
         
-        #status { text-align: center; margin-top: 15px; font-size: 13px; font-weight: bold; min-height: 20px; }
+        #status { text-align: center; margin-top: 15px; font-size: 13px; font-weight: bold; min-height: 20px; border-radius: 5px; padding: 5px; }
         .loading-text { font-size: 11px; color: var(--primary); padding: 10px; text-align: center; }
     </style>
 </head>
@@ -63,7 +59,7 @@
 
     <div class="group">
         <label>Webhook Gerado</label>
-        <input type="text" id="webhookUrl" readonly style="font-size: 10px; opacity: 0.5;" placeholder="URL aparecerá aqui">
+        <input type="text" id="webhookUrl" readonly style="font-size: 10px; opacity: 0.5;" placeholder="Aguardando seleção de canal...">
     </div>
 </div>
 
@@ -72,13 +68,13 @@
         <h2 style="margin:0 0 20px 0;">Enviar Mensagem</h2>
         
         <div class="group">
-            <label>Nome do Bot</label>
+            <label>Nome do Bot (Apelido)</label>
             <input type="text" id="botName" placeholder="Ex: Jarvis">
         </div>
 
         <div class="group" style="margin-top:15px">
-            <label>Conteúdo</label>
-            <textarea id="msgContent" rows="5" placeholder="Digite sua mensagem..."></textarea>
+            <label>Conteúdo da Mensagem</label>
+            <textarea id="msgContent" rows="5" placeholder="Digite sua mensagem aqui..."></textarea>
         </div>
 
         <div class="group" style="margin-top:15px">
@@ -86,7 +82,7 @@
             <input type="file" id="msgFile">
         </div>
 
-        <button class="btn btn-send" onclick="sendMessage()">DISPARAR WEBHOOK</button>
+        <button class="btn btn-send" onclick="sendMessage()">🚀 DISPARAR WEBHOOK</button>
         <div id="status"></div>
     </div>
 </div>
@@ -94,7 +90,6 @@
 <script>
     const API_URL = "https://discord.com/api/v10";
 
-    // Busca todos os servidores onde o bot está
     async function fetchGuilds() {
         const token = document.getElementById('botToken').value.trim();
         const guildList = document.getElementById('guildList');
@@ -109,13 +104,14 @@
             });
             const guilds = await res.json();
 
+            if(res.status === 401) throw new Error("401: Token Inválido.");
             if(!res.ok) throw new Error(guilds.message || "Erro ao buscar servidores");
 
             guildList.innerHTML = "";
             guilds.forEach(guild => {
                 const item = document.createElement('div');
                 item.className = 'list-item';
-                item.innerHTML = `<span>${guild.name}</span>`;
+                item.innerText = guild.name;
                 item.onclick = () => {
                     document.querySelectorAll('#guildList .list-item').forEach(el => el.classList.remove('active'));
                     item.classList.add('active');
@@ -128,7 +124,6 @@
         }
     }
 
-    // Busca canais de texto do servidor selecionado
     async function fetchChannels(guildId, token) {
         const channelList = document.getElementById('channelList');
         channelList.innerHTML = '<div class="loading-text">Buscando canais...</div>';
@@ -139,10 +134,18 @@
             });
             const channels = await res.json();
 
-            // Filtrar apenas canais de texto (type 0) ou anúncios (type 5)
+            if(res.status === 403) throw new Error("Bot sem permissão 'View Channels' aqui.");
+            if(!res.ok) throw new Error(channels.message || "Erro nos canais");
+
+            // Canais de Texto (0) e Anúncios (5)
             const textChannels = channels.filter(c => c.type === 0 || c.type === 5);
 
             channelList.innerHTML = "";
+            if(textChannels.length === 0) {
+                channelList.innerHTML = '<div style="padding:10px; font-size:11px; opacity:0.5;">Nenhum canal de texto encontrado.</div>';
+                return;
+            }
+
             textChannels.forEach(chan => {
                 const item = document.createElement('div');
                 item.className = 'list-item';
@@ -155,15 +158,15 @@
                 channelList.appendChild(item);
             });
         } catch(e) {
-            channelList.innerHTML = `<div style="color:#ff4d4d; padding:10px; font-size:11px;">Erro ao carregar canais.</div>`;
+            channelList.innerHTML = `<div style="color:#ff4d4d; padding:10px; font-size:11px;">${e.message}</div>`;
         }
     }
 
-    // Gerencia o Webhook no canal escolhido
     async function setupWebhook(channelId, token) {
         const status = document.getElementById('status');
         const urlInput = document.getElementById('webhookUrl');
         status.innerHTML = "⏳ Configurando Webhook...";
+        status.style.color = "white";
 
         try {
             const res = await fetch(`${API_URL}/channels/${channelId}/webhooks`, {
@@ -171,30 +174,30 @@
             });
             const webhooks = await res.json();
 
-            // Tenta achar um webhook já criado por esse sistema
-            let activeWebhook = webhooks.find(w => w.name === "DashboardControl");
+            let activeWebhook = webhooks.find(w => w.name === "DashControl");
 
             if(!activeWebhook) {
                 const createRes = await fetch(`${API_URL}/channels/${channelId}/webhooks`, {
                     method: 'POST',
                     headers: { "Authorization": `Bot ${token}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: "DashboardControl" })
+                    body: JSON.stringify({ name: "DashControl" })
                 });
                 activeWebhook = await createRes.json();
             }
 
             if(activeWebhook.url) {
                 urlInput.value = activeWebhook.url;
-                status.innerHTML = "<span style='color:#00ff88'>✅ Webhook Pronto!</span>";
+                status.innerHTML = "✅ Canal pronto para envio!";
+                status.style.color = "#00ff88";
             } else {
-                throw new Error("Não foi possível obter a URL.");
+                throw new Error("Falha ao gerar URL.");
             }
         } catch(e) {
-            status.innerHTML = "<span style='color:#ff4d4d'>❌ Erro ao vincular. Verifique permissões.</span>";
+            status.innerHTML = "❌ Erro ao criar Webhook. Verifique permissões do Bot.";
+            status.style.color = "#ff4d4d";
         }
     }
 
-    // Envia a mensagem final
     async function sendMessage() {
         const url = document.getElementById('webhookUrl').value;
         const text = document.getElementById('msgContent').value;
@@ -202,28 +205,33 @@
         const file = document.getElementById('msgFile').files[0];
         const status = document.getElementById('status');
 
-        if(!url) return alert("Selecione um servidor e canal primeiro!");
+        if(!url) return alert("Selecione um canal primeiro!");
+        if(!text && !file) return alert("Escreva algo ou anexe um arquivo!");
 
         const formData = new FormData();
         formData.append('payload_json', JSON.stringify({
-            content: text,
+            content: text || "",
             username: botName || undefined
         }));
         
         if(file) formData.append('file', file);
 
         status.innerHTML = "🚀 Enviando...";
+        status.style.color = "white";
 
         try {
             const res = await fetch(url, { method: 'POST', body: formData });
             if(res.ok) {
-                status.innerHTML = "<span style='color:#00ff88'>🚀 Mensagem enviada com sucesso!</span>";
+                status.innerHTML = "✅ Mensagem enviada!";
+                status.style.color = "#00ff88";
                 document.getElementById('msgContent').value = "";
             } else {
-                status.innerHTML = "<span style='color:#ff4d4d'>❌ Erro no envio.</span>";
+                status.innerHTML = "❌ Falha no envio.";
+                status.style.color = "#ff4d4d";
             }
         } catch(e) {
-            status.innerHTML = "<span style='color:#ff4d4d'>❌ Erro de conexão.</span>";
+            status.innerHTML = "❌ Erro de conexão.";
+            status.style.color = "#ff4d4d";
         }
     }
 </script>
