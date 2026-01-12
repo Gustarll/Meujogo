@@ -3,139 +3,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webhook Master Dashboard</title>
+    <title>Webhook Control Panel</title>
     <style>
-        :root { --primary: #00d2ff; --secondary: #3a7bd5; --bg: #0f172a; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: white; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        :root { --primary: #00d2ff; --bg: #0f172a; --card-bg: rgba(30, 41, 59, 0.7); }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: white; margin: 0; display: flex; height: 100vh; }
         
-        /* Sidebar Estilizada */
-        .sidebar { width: 320px; background: rgba(0,0,0,0.4); padding: 25px; border-right: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 15px; overflow-y: auto; backdrop-filter: blur(10px); }
-        .sidebar h3 { color: var(--primary); margin: 0; font-size: 18px; border-bottom: 1px solid rgba(0,210,255,0.3); padding-bottom: 10px; }
+        .sidebar { width: 350px; background: rgba(0,0,0,0.4); padding: 20px; border-right: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .main { flex: 1; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #1e293b 0%, #0f172a 100%); }
         
-        .group { display: flex; flex-direction: column; gap: 5px; }
-        label { font-size: 10px; text-transform: uppercase; color: #94a3b8; font-weight: bold; letter-spacing: 1px; margin-top: 10px; }
-        input, textarea { background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; color: white; padding: 12px; font-size: 13px; transition: 0.3s; }
-        input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 10px rgba(0,210,255,0.2); }
+        .group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+        label { font-size: 10px; text-transform: uppercase; color: #94a3b8; font-weight: bold; }
+        input, select, textarea { background: var(--card-bg); border: 1px solid #334155; border-radius: 8px; color: white; padding: 10px; font-size: 13px; }
         
-        /* Botões Modernos */
-        .btn { cursor: pointer; border: none; border-radius: 10px; font-weight: bold; transition: 0.3s; padding: 14px; text-align: center; }
-        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; }
-        .btn-yellow { background: #facc15; color: #000; margin-top: 10px; }
-        .btn:hover { transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-        .btn:active { transform: translateY(0); }
+        /* Lista de Servidores e Canais */
+        .selector-box { background: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; max-height: 200px; overflow-y: auto; border: 1px solid #334155; }
+        .item-list { padding: 8px; cursor: pointer; border-radius: 5px; font-size: 13px; transition: 0.2s; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .item-list:hover { background: var(--primary); color: #000; }
+        
+        .card { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); padding: 35px; border-radius: 20px; width: 450px; border: 1px solid rgba(255,255,255,0.1); }
+        .btn { cursor: pointer; border: none; border-radius: 8px; font-weight: bold; padding: 12px; transition: 0.3s; }
+        .btn-primary { background: var(--primary); color: #000; width: 100%; margin-top: 20px; font-size: 16px; }
+        .btn-load { background: #5865F2; color: white; font-size: 11px; }
 
-        .main { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%); }
-        .card { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); padding: 40px; border-radius: 25px; width: 450px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
-        
-        #status { text-align: center; margin-top: 20px; font-size: 13px; padding: 10px; border-radius: 8px; min-height: 20px; }
-        .status-error { background: rgba(255, 77, 77, 0.1); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.2); }
-        .status-success { background: rgba(0, 255, 136, 0.1); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.2); }
+        #status { margin-top: 15px; text-align: center; font-size: 12px; font-weight: bold; }
+        .loader { color: var(--primary); font-size: 10px; }
     </style>
 </head>
 <body>
 
 <div class="sidebar">
-    <h3>⚙️ Configurações</h3>
+    <h3>🤖 Bot Manager</h3>
     
     <div class="group">
-        <label>Token do Bot (Secret)</label>
-        <input type="password" id="botToken" placeholder="MTA0...">
+        <label>Token do Bot</label>
+        <input type="password" id="botToken" placeholder="Insira o Token...">
+        <button class="btn btn-load" onclick="carregarServidores()" style="margin-top:5px">🔄 CARREGAR SERVIDORES</button>
     </div>
 
     <div class="group">
-        <label>ID do Canal</label>
-        <input type="text" id="chanId" placeholder="ID do Canal alvo">
+        <label>1. Selecione o Servidor</label>
+        <div id="serverList" class="selector-box">
+            <div class="item-list" style="opacity:0.5">Aguardando Token...</div>
+        </div>
     </div>
 
-    <button class="btn btn-yellow" onclick="gerarWebhook()">⚡ VINCULAR CANAL AGORA</button>
+    <div class="group">
+        <label>2. Selecione o Canal</label>
+        <div id="channelList" class="selector-box">
+            <div class="item-list" style="opacity:0.5">Selecione um servidor primeiro...</div>
+        </div>
+    </div>
 
-    <div class="group" style="margin-top: 20px;">
-        <label>Webhook URL Ativa</label>
-        <input type="text" id="webUrl" readonly style="font-size: 10px; opacity: 0.6;" placeholder="Aguardando vínculo...">
+    <div class="group">
+        <label>URL do Webhook Gerada</label>
+        <input type="text" id="webUrl" readonly style="font-size: 9px; opacity: 0.7;">
     </div>
 </div>
 
 <div class="main">
     <div class="card">
-        <h2 style="margin-top:0; font-size: 24px;">Nova Mensagem</h2>
-        
+        <h2 style="margin-top:0">Enviar Mensagem</h2>
         <div class="group">
-            <label>Nome de Exibição do Bot</label>
-            <input type="text" id="botName" placeholder="Ex: Jarvis">
+            <label>Nome do Bot</label>
+            <input type="text" id="botName" placeholder="Apelido do bot no envio">
         </div>
-
-        <div class="group" style="margin-top:15px">
+        <div class="group">
             <label>Mensagem</label>
-            <textarea id="msgText" rows="4" placeholder="O que deseja enviar?"></textarea>
+            <textarea id="msgText" rows="5" placeholder="Digite aqui..."></textarea>
         </div>
-
-        <div class="group" style="margin-top:15px">
-            <label>Anexar Arquivo</label>
-            <input type="file" id="msgFile" style="font-size: 11px;">
+        <div class="group">
+            <label>Anexar Imagem</label>
+            <input type="file" id="msgFile">
         </div>
-
-        <button class="btn btn-primary" style="width:100%; margin-top:30px; font-size:16px;" onclick="enviar()">ENVIAR PARA O DISCORD</button>
+        <button class="btn btn-primary" onclick="enviar()">DISPARAR</button>
         <div id="status"></div>
     </div>
 </div>
 
 <script>
-    // Memória do navegador
-    window.onload = () => {
-        document.getElementById('botToken').value = localStorage.getItem('tk') || '';
-        document.getElementById('chanId').value = localStorage.getItem('cid') || '';
-        document.getElementById('botName').value = localStorage.getItem('bn') || '';
-        document.getElementById('webUrl').value = localStorage.getItem('wurl') || '';
-    };
+    const apiBase = "https://discord.com/api/v10";
 
-    function save() {
-        localStorage.setItem('tk', document.getElementById('botToken').value);
-        localStorage.setItem('cid', document.getElementById('chanId').value);
-        localStorage.setItem('bn', document.getElementById('botName').value);
-    }
-
-    async function gerarWebhook() {
-        save();
+    // Busca Servidores que o Bot está
+    async function carregarServidores() {
         const token = document.getElementById('botToken').value.trim();
-        const channelId = document.getElementById('chanId').value.trim();
-        const name = document.getElementById('botName').value || "Webhook Dash";
-        const status = document.getElementById('status');
+        const serverList = document.getElementById('serverList');
+        if(!token) return alert("Insira o Token!");
 
-        if(!token || !channelId) {
-            status.innerHTML = "Preencha o Token e o ID!";
-            status.className = "status-error";
-            return;
-        }
-
-        status.innerHTML = "⏳ Tentando vincular...";
-        status.className = "";
+        serverList.innerHTML = "<div class='loader'>Buscando guildas...</div>";
 
         try {
-            const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/webhooks`, {
-                method: 'POST',
-                headers: { 
-                    "Authorization": `Bot ${token}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ name: name })
+            const res = await fetch(`${apiBase}/users/@me/guilds`, {
+                headers: { "Authorization": `Bot ${token}` }
             });
+            const guilds = await res.json();
 
-            const data = await res.json();
+            if(!res.ok) throw new Error(guilds.message);
 
-            if (res.ok && data.url) {
-                document.getElementById('webUrl').value = data.url;
-                localStorage.setItem('wurl', data.url);
-                status.innerHTML = "✅ Canal vinculado com sucesso!";
-                status.className = "status-success";
-            } else {
-                let errorMsg = data.message || "Erro desconhecido";
-                if(res.status === 403) errorMsg = "O Bot não está no servidor ou não tem permissão.";
-                if(res.status === 404) errorMsg = "ID do Canal não encontrado.";
-                throw new Error(errorMsg);
+            serverList.innerHTML = "";
+            guilds.forEach(guild => {
+                const div = document.createElement('div');
+                div.className = 'item-list';
+                div.innerText = guild.name;
+                div.onclick = () => carregarCanais(guild.id, token);
+                serverList.appendChild(div);
+            });
+        } catch(e) {
+            serverList.innerHTML = "<div style='color:red'>Erro ao carregar servidores.</div>";
+        }
+    }
+
+    // Busca Canais de Texto do Servidor Selecionado
+    async function carregarCanais(guildId, token) {
+        const channelList = document.getElementById('channelList');
+        channelList.innerHTML = "<div class='loader'>Buscando canais...</div>";
+
+        try {
+            const res = await fetch(`${apiBase}/guilds/${guildId}/channels`, {
+                headers: { "Authorization": `Bot ${token}` }
+            });
+            const channels = await res.json();
+
+            // Filtra apenas canais de texto (type 0) ou anúncios (type 5)
+            const textChannels = channels.filter(c => c.type === 0 || c.type === 5);
+
+            channelList.innerHTML = "";
+            textChannels.forEach(chan => {
+                const div = document.createElement('div');
+                div.className = 'item-list';
+                div.innerText = "# " + chan.name;
+                div.onclick = () => vincularOuCriarWebhook(chan.id, token, chan.name);
+                channelList.appendChild(div);
+            });
+        } catch(e) {
+            channelList.innerHTML = "Erro ao carregar canais.";
+        }
+    }
+
+    // Verifica se já tem Webhook ou cria um novo no canal clicado
+    async function vincularOuCriarWebhook(channelId, token, channelName) {
+        const status = document.getElementById('status');
+        status.innerHTML = "⏳ Configurando Webhook...";
+
+        try {
+            // 1. Busca webhooks existentes no canal
+            const res = await fetch(`${apiBase}/channels/${channelId}/webhooks`, {
+                headers: { "Authorization": `Bot ${token}` }
+            });
+            const webhooks = await res.json();
+
+            let myWebhook = webhooks.find(w => w.name.includes("Dash"));
+
+            if(!myWebhook) {
+                // 2. Cria um novo se não existir
+                const createRes = await fetch(`${apiBase}/channels/${channelId}/webhooks`, {
+                    method: 'POST',
+                    headers: { "Authorization": `Bot ${token}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: "Dash Webhook" })
+                });
+                myWebhook = await createRes.json();
+            }
+
+            if(myWebhook.url) {
+                document.getElementById('webUrl').value = myWebhook.url;
+                status.innerHTML = `✅ Pronto para enviar em #${channelName}`;
             }
         } catch(e) {
-            status.innerHTML = `❌ Erro: ${e.message}`;
-            status.className = "status-error";
+            status.innerHTML = "❌ Erro ao criar Webhook. O Bot tem permissão?";
         }
     }
 
@@ -146,35 +179,21 @@
         const file = document.getElementById('msgFile').files[0];
         const status = document.getElementById('status');
 
-        if(!url) {
-            status.innerHTML = "Gere o Webhook primeiro!";
-            status.className = "status-error";
-            return;
-        }
+        if(!url) return alert("Selecione um canal primeiro!");
 
         const formData = new FormData();
-        formData.append('payload_json', JSON.stringify({ content: text, username: name }));
+        formData.append('payload_json', JSON.stringify({ content: text, username: name || undefined }));
         if(file) formData.append('file', file);
 
         status.innerHTML = "🚀 Enviando...";
-        status.className = "";
-
-        try {
-            const res = await fetch(url, { method: 'POST', body: formData });
-            if(res.ok) {
-                status.innerHTML = "✅ Mensagem enviada!";
-                status.className = "status-success";
-                document.getElementById('msgText').value = "";
-            } else {
-                status.innerHTML = "❌ Erro ao enviar para o Webhook.";
-                status.className = "status-error";
-            }
-        } catch(e) {
-            status.innerHTML = "❌ Erro de conexão/CORS.";
-            status.className = "status-error";
+        const res = await fetch(url, { method: 'POST', body: formData });
+        if(res.ok) {
+            status.innerHTML = "✅ Mensagem enviada!";
+            document.getElementById('msgText').value = "";
+        } else {
+            status.innerHTML = "❌ Erro ao enviar.";
         }
     }
 </script>
-
 </body>
 </html>
