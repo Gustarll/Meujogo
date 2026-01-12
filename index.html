@@ -2,238 +2,135 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webhook Control Panel - PRO</title>
+    <title>GAME SHOT</title>
     <style>
-        :root { --primary: #00d2ff; --bg: #0f172a; --glass: rgba(30, 41, 59, 0.7); }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: white; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        
-        .sidebar { width: 350px; background: rgba(0,0,0,0.4); padding: 20px; border-right: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 15px; overflow-y: auto; backdrop-filter: blur(10px); }
-        .sidebar h3 { color: var(--primary); margin: 0; font-size: 18px; border-bottom: 1px solid rgba(0,210,255,0.3); padding-bottom: 10px; }
-        
-        .list-container { background: rgba(0,0,0,0.3); border-radius: 10px; border: 1px solid #334155; max-height: 180px; overflow-y: auto; margin-top: 5px; }
-        .list-item { padding: 10px; cursor: pointer; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05); transition: 0.2s; display: flex; align-items: center; }
-        .list-item:hover { background: var(--primary); color: #000; font-weight: bold; }
-        .list-item.active { background: #3a7bd5; color: white; }
-
-        .group { display: flex; flex-direction: column; gap: 5px; }
-        label { font-size: 10px; text-transform: uppercase; color: #94a3b8; font-weight: bold; }
-        input, textarea { background: var(--glass); border: 1px solid #334155; border-radius: 8px; color: white; padding: 10px; font-size: 13px; outline: none; width: 100%; box-sizing: border-box; }
-        
-        .btn { cursor: pointer; border: none; border-radius: 8px; font-weight: bold; padding: 12px; transition: 0.3s; width: 100%; }
-        .btn-load { background: #5865F2; color: white; margin-bottom: 10px; }
-        .btn-send { background: linear-gradient(to right, #00d2ff, #3a7bd5); color: white; font-size: 16px; margin-top: 20px; }
-        .btn:hover { filter: brightness(1.2); transform: scale(1.01); }
-
-        .main { flex: 1; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #1e293b 0%, #0f172a 100%); position: relative; }
-        .card { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); padding: 35px; border-radius: 20px; width: 450px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-        
-        #status { text-align: center; margin-top: 15px; font-size: 13px; font-weight: bold; min-height: 20px; border-radius: 5px; padding: 5px; }
-        .loading-text { font-size: 11px; color: var(--primary); padding: 10px; text-align: center; }
+        body { margin: 0; background: #222; color: white; font-family: sans-serif; overflow: hidden; }
+        #menu { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 10; }
+        canvas { display: block; background: #333; cursor: crosshair; }
+        .btn { padding: 15px 30px; margin: 10px; cursor: pointer; background: #e74c3c; border: none; color: white; font-weight: bold; }
+        input { padding: 10px; font-size: 1.2rem; text-align: center; width: 150px; }
     </style>
 </head>
 <body>
 
-<div class="sidebar">
-    <h3>⚙️ Controle do Bot</h3>
-    
-    <div class="group">
-        <label>Token do Bot</label>
-        <input type="password" id="botToken" placeholder="Cole o token do bot aqui...">
-        <button class="btn btn-load" onclick="fetchGuilds()">🔄 Listar Servidores</button>
+<div id="menu">
+    <h1>GAME SHOT</h1>
+    <button class="btn" onclick="startTraining()">MODO TREINAMENTO</button>
+    <hr style="width: 200px; border: 0.5px solid #555;">
+    <h3>MODO ONLINE (1v1)</h3>
+    <button class="btn" style="background: #27ae60;" onclick="createRoom()">CRIAR CÓDIGO</button>
+    <div style="margin-top: 10px;">
+        <input type="text" id="roomInput" placeholder="000000" maxlength="6">
+        <button class="btn" style="background: #2980b9;" onclick="joinRoom()">ENTRAR</button>
     </div>
-
-    <div class="group">
-        <label>1. Escolha o Servidor</label>
-        <div id="guildList" class="list-container">
-            <div style="padding:10px; font-size:12px; opacity:0.5;">Aguardando Token...</div>
-        </div>
-    </div>
-
-    <div class="group">
-        <label>2. Escolha o Canal</label>
-        <div id="channelList" class="list-container">
-            <div style="padding:10px; font-size:12px; opacity:0.5;">Selecione um servidor...</div>
-        </div>
-    </div>
-
-    <div class="group">
-        <label>Webhook Gerado</label>
-        <input type="text" id="webhookUrl" readonly style="font-size: 10px; opacity: 0.5;" placeholder="Aguardando seleção de canal...">
-    </div>
+    <p id="status"></p>
 </div>
 
-<div class="main">
-    <div class="card">
-        <h2 style="margin:0 0 20px 0;">Enviar Mensagem</h2>
+<canvas id="gameCanvas"></canvas>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    // Suas configurações extraídas da imagem
+    const firebaseConfig = {
+        apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
+        authDomain: "whitermultiplayer.firebaseapp.com",
+        databaseURL: "https://whitermultiplayer-default-rtdb.firebaseio.com",
+        projectId: "whitermultiplayer",
+        storageBucket: "whitermultiplayer.firebasestorage.app",
+        messagingSenderId: "859405698218",
+        appId: "1:859405698218:web:44b4d4e1a96c937373cd3",
+        measurementId: "G-HQ5JZV5NS3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Variáveis do Jogo
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let player = { x: 100, y: 100, color: 'blue', lastShot: 0 };
+    let enemy = { x: -100, y: -100, color: 'red' };
+    let roomId = null;
+    let isPlayer1 = false;
+
+    // --- LÓGICA DE SALAS ---
+    window.createRoom = function() {
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        roomId = code;
+        isPlayer1 = true;
+        set(ref(db, 'rooms/' + roomId), { p1: { x: 100, y: 100 }, status: 'waiting' });
+        document.getElementById('status').innerText = "Código da Sala: " + code;
+        observeRoom();
+    };
+
+    window.joinRoom = function() {
+        const code = document.getElementById('roomInput').value;
+        if(code.length === 6) {
+            roomId = code;
+            isPlayer1 = false;
+            update(ref(db, 'rooms/' + roomId), { p2: { x: 500, y: 500 }, status: 'playing' });
+            document.getElementById('menu').style.display = 'none';
+            observeRoom();
+        }
+    };
+
+    function observeRoom() {
+        onValue(ref(db, 'rooms/' + roomId), (snapshot) => {
+            const data = snapshot.val();
+            if(data.status === 'playing') document.getElementById('menu').style.display = 'none';
+            if(isPlayer1 && data.p2) enemy = data.p2;
+            if(!isPlayer1 && data.p1) enemy = data.p1;
+        });
+    }
+
+    // --- LÓGICA DO JOGO ---
+    window.addEventListener('mousemove', (e) => {
+        if(!roomId) return;
+        player.x = e.clientX;
+        player.y = e.clientY;
         
-        <div class="group">
-            <label>Nome do Bot (Apelido)</label>
-            <input type="text" id="botName" placeholder="Ex: Jarvis">
-        </div>
+        // Atualiza posição no Firebase
+        const path = isPlayer1 ? `rooms/${roomId}/p1` : `rooms/${roomId}/p2`;
+        update(ref(db, path), { x: player.x, y: player.y });
+    });
 
-        <div class="group" style="margin-top:15px">
-            <label>Conteúdo da Mensagem</label>
-            <textarea id="msgContent" rows="5" placeholder="Digite sua mensagem aqui..."></textarea>
-        </div>
+    window.addEventListener('click', () => {
+        const agora = Date.now();
+        if(agora - player.lastShot > 500) { // Delay de 0.5s
+            console.log("TIRO!");
+            player.lastShot = agora;
+            // Aqui entra a lógica de raio (raycasting) para acertar o inimigo
+        }
+    });
 
-        <div class="group" style="margin-top:15px">
-            <label>Anexar Imagem</label>
-            <input type="file" id="msgFile">
-        </div>
-
-        <button class="btn btn-send" onclick="sendMessage()">🚀 DISPARAR WEBHOOK</button>
-        <div id="status"></div>
-    </div>
-</div>
-
-<script>
-    const API_URL = "https://discord.com/api/v10";
-
-    async function fetchGuilds() {
-        const token = document.getElementById('botToken').value.trim();
-        const guildList = document.getElementById('guildList');
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        if(!token) return alert("Insira o Token primeiro!");
+        // Desenha Jogador
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, 20, 0, Math.PI*2);
+        ctx.fillStyle = player.color;
+        ctx.fill();
 
-        guildList.innerHTML = '<div class="loading-text">Buscando servidores...</div>';
+        // Desenha Inimigo
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, 20, 0, Math.PI*2);
+        ctx.fillStyle = enemy.color;
+        ctx.fill();
 
-        try {
-            const res = await fetch(`${API_URL}/users/@me/guilds`, {
-                headers: { "Authorization": `Bot ${token}` }
-            });
-            const guilds = await res.json();
-
-            if(res.status === 401) throw new Error("401: Token Inválido.");
-            if(!res.ok) throw new Error(guilds.message || "Erro ao buscar servidores");
-
-            guildList.innerHTML = "";
-            guilds.forEach(guild => {
-                const item = document.createElement('div');
-                item.className = 'list-item';
-                item.innerText = guild.name;
-                item.onclick = () => {
-                    document.querySelectorAll('#guildList .list-item').forEach(el => el.classList.remove('active'));
-                    item.classList.add('active');
-                    fetchChannels(guild.id, token);
-                };
-                guildList.appendChild(item);
-            });
-        } catch(e) {
-            guildList.innerHTML = `<div style="color:#ff4d4d; padding:10px; font-size:11px;">Erro: ${e.message}</div>`;
-        }
+        requestAnimationFrame(draw);
     }
+    draw();
 
-    async function fetchChannels(guildId, token) {
-        const channelList = document.getElementById('channelList');
-        channelList.innerHTML = '<div class="loading-text">Buscando canais...</div>';
-
-        try {
-            const res = await fetch(`${API_URL}/guilds/${guildId}/channels`, {
-                headers: { "Authorization": `Bot ${token}` }
-            });
-            const channels = await res.json();
-
-            if(res.status === 403) throw new Error("Bot sem permissão 'View Channels' aqui.");
-            if(!res.ok) throw new Error(channels.message || "Erro nos canais");
-
-            // Canais de Texto (0) e Anúncios (5)
-            const textChannels = channels.filter(c => c.type === 0 || c.type === 5);
-
-            channelList.innerHTML = "";
-            if(textChannels.length === 0) {
-                channelList.innerHTML = '<div style="padding:10px; font-size:11px; opacity:0.5;">Nenhum canal de texto encontrado.</div>';
-                return;
-            }
-
-            textChannels.forEach(chan => {
-                const item = document.createElement('div');
-                item.className = 'list-item';
-                item.innerText = `# ${chan.name}`;
-                item.onclick = () => {
-                    document.querySelectorAll('#channelList .list-item').forEach(el => el.classList.remove('active'));
-                    item.classList.add('active');
-                    setupWebhook(chan.id, token);
-                };
-                channelList.appendChild(item);
-            });
-        } catch(e) {
-            channelList.innerHTML = `<div style="color:#ff4d4d; padding:10px; font-size:11px;">${e.message}</div>`;
-        }
-    }
-
-    async function setupWebhook(channelId, token) {
-        const status = document.getElementById('status');
-        const urlInput = document.getElementById('webhookUrl');
-        status.innerHTML = "⏳ Configurando Webhook...";
-        status.style.color = "white";
-
-        try {
-            const res = await fetch(`${API_URL}/channels/${channelId}/webhooks`, {
-                headers: { "Authorization": `Bot ${token}` }
-            });
-            const webhooks = await res.json();
-
-            let activeWebhook = webhooks.find(w => w.name === "DashControl");
-
-            if(!activeWebhook) {
-                const createRes = await fetch(`${API_URL}/channels/${channelId}/webhooks`, {
-                    method: 'POST',
-                    headers: { "Authorization": `Bot ${token}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: "DashControl" })
-                });
-                activeWebhook = await createRes.json();
-            }
-
-            if(activeWebhook.url) {
-                urlInput.value = activeWebhook.url;
-                status.innerHTML = "✅ Canal pronto para envio!";
-                status.style.color = "#00ff88";
-            } else {
-                throw new Error("Falha ao gerar URL.");
-            }
-        } catch(e) {
-            status.innerHTML = "❌ Erro ao criar Webhook. Verifique permissões do Bot.";
-            status.style.color = "#ff4d4d";
-        }
-    }
-
-    async function sendMessage() {
-        const url = document.getElementById('webhookUrl').value;
-        const text = document.getElementById('msgContent').value;
-        const botName = document.getElementById('botName').value;
-        const file = document.getElementById('msgFile').files[0];
-        const status = document.getElementById('status');
-
-        if(!url) return alert("Selecione um canal primeiro!");
-        if(!text && !file) return alert("Escreva algo ou anexe um arquivo!");
-
-        const formData = new FormData();
-        formData.append('payload_json', JSON.stringify({
-            content: text || "",
-            username: botName || undefined
-        }));
-        
-        if(file) formData.append('file', file);
-
-        status.innerHTML = "🚀 Enviando...";
-        status.style.color = "white";
-
-        try {
-            const res = await fetch(url, { method: 'POST', body: formData });
-            if(res.ok) {
-                status.innerHTML = "✅ Mensagem enviada!";
-                status.style.color = "#00ff88";
-                document.getElementById('msgContent').value = "";
-            } else {
-                status.innerHTML = "❌ Falha no envio.";
-                status.style.color = "#ff4d4d";
-            }
-        } catch(e) {
-            status.innerHTML = "❌ Erro de conexão.";
-            status.style.color = "#ff4d4d";
-        }
-    }
+    window.startTraining = () => {
+        document.getElementById('menu').style.display = 'none';
+        roomId = "training"; // Simula modo offline
+    };
 </script>
 </body>
 </html>
