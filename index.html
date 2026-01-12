@@ -3,228 +3,178 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Whiter Battle - Background Sync</title>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+    <title>Webhook Master Dashboard</title>
     <style>
-        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0f0f1b; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        #game-board { position: relative; width: 800px; height: 500px; background: #2c3e50; border: 4px solid #34495e; border-radius: 10px; display: none; overflow: hidden; cursor: crosshair; }
-        #player { position: absolute; width: 40px; height: 40px; background: #e94560; border-radius: 8px; z-index: 10; }
-        .other-player { position: absolute; width: 40px; height: 40px; background: #0077ff; border-radius: 8px; z-index: 9; }
-        .enemy { position: absolute; width: 30px; height: 30px; background: #2ecc71; border-radius: 5px; z-index: 8; }
-        .bullet { position: absolute; width: 10px; height: 10px; background: #f9ed69; border-radius: 50%; z-index: 5; }
-        .player-name { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); color: white; font-size: 12px; font-weight: bold; white-space: nowrap; text-shadow: 1px 1px 2px black; pointer-events: none; }
-        #config-panel { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; color: white; }
-        #login-screen, #game-over { position: fixed; inset: 0; background: #1a1a2e; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10000; color: white; }
-        #game-over { display: none; background: rgba(255, 0, 0, 0.2); backdrop-filter: blur(5px); }
-        #ui-stack { position: absolute; top: 15px; left: 15px; z-index: 100; display: none; color: white; }
-        .hp-bar { width: 200px; height: 15px; background: #444; border: 2px solid white; border-radius: 10px; overflow: hidden; margin-bottom: 5px; }
-        #hp-fill { width: 100%; height: 100%; background: #ff3e3e; transition: 0.2s; }
-        button { padding: 12px 30px; margin: 10px; cursor: pointer; background: #e94560; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; min-width: 220px; }
-        input { padding: 12px; border-radius: 8px; border: none; width: 250px; text-align: center; font-size: 18px; margin-bottom: 10px; }
-        .room-tag { color: #f9ed69; font-size: 20px; font-weight: bold; padding: 10px; border: 2px dashed #f9ed69; margin: 15px; }
+        :root { --primary: #00d2ff; --secondary: #3a7bd5; --bg: #0f172a; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: white; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar Estilizada */
+        .sidebar { width: 320px; background: rgba(0,0,0,0.4); padding: 25px; border-right: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 15px; overflow-y: auto; backdrop-filter: blur(10px); }
+        .sidebar h3 { color: var(--primary); margin: 0; font-size: 18px; border-bottom: 1px solid rgba(0,210,255,0.3); padding-bottom: 10px; }
+        
+        .group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 10px; text-transform: uppercase; color: #94a3b8; font-weight: bold; letter-spacing: 1px; margin-top: 10px; }
+        input, textarea { background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 10px; color: white; padding: 12px; font-size: 13px; transition: 0.3s; }
+        input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 10px rgba(0,210,255,0.2); }
+        
+        /* Botões Modernos */
+        .btn { cursor: pointer; border: none; border-radius: 10px; font-weight: bold; transition: 0.3s; padding: 14px; text-align: center; }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; }
+        .btn-yellow { background: #facc15; color: #000; margin-top: 10px; }
+        .btn:hover { transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .btn:active { transform: translateY(0); }
+
+        .main { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%); }
+        .card { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); padding: 40px; border-radius: 25px; width: 450px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        
+        #status { text-align: center; margin-top: 20px; font-size: 13px; padding: 10px; border-radius: 8px; min-height: 20px; }
+        .status-error { background: rgba(255, 77, 77, 0.1); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.2); }
+        .status-success { background: rgba(0, 255, 136, 0.1); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.2); }
     </style>
 </head>
 <body>
 
-    <div id="ui-stack">
-        <div class="hp-bar"><div id="hp-fill"></div></div>
-        <div>XP: <span id="xp-val">0</span> | Nível: <span id="lvl-val">1</span></div>
-        <div id="room-info" style="color: #f9ed69; font-size: 12px;">Modo: Solo</div>
+<div class="sidebar">
+    <h3>⚙️ Configurações</h3>
+    
+    <div class="group">
+        <label>Token do Bot (Secret)</label>
+        <input type="password" id="botToken" placeholder="MTA0...">
     </div>
 
-    <div id="login-screen">
-        <h1 style="color: #0077ff;">WHITER BATTLE CO-OP</h1>
-        <input type="text" id="username-input" placeholder="Seu apelido..." maxlength="12">
-        <button onclick="startGame()">INICIAR BATALHA</button>
+    <div class="group">
+        <label>ID do Canal</label>
+        <input type="text" id="chanId" placeholder="ID do Canal alvo">
     </div>
 
-    <div id="config-panel">
-        <h1 style="color: #e94560;">MENU CO-OP</h1>
-        <button onclick="createRoom()" style="background: #0077ff;">CRIAR SALA (6 DÍGITOS)</button>
-        <button onclick="joinRoomPrompt()" style="background: #2ecc71;">ENTRAR EM SALA</button>
-        <div id="room-display" class="room-tag">SALA: SOLO</div>
-        <button onclick="toggleMenu()" style="background: #555;">VOLTAR AO JOGO (ESC)</button>
-    </div>
+    <button class="btn btn-yellow" onclick="gerarWebhook()">⚡ VINCULAR CANAL AGORA</button>
 
-    <div id="game-over">
-        <h1>VOCÊ FOI DERROTADO!</h1>
-        <button onclick="location.reload()">TENTAR NOVAMENTE</button>
+    <div class="group" style="margin-top: 20px;">
+        <label>Webhook URL Ativa</label>
+        <input type="text" id="webUrl" readonly style="font-size: 10px; opacity: 0.6;" placeholder="Aguardando vínculo...">
     </div>
+</div>
 
-    <div id="game-board">
-        <div id="player"><div class="player-name" id="my-name-tag"></div></div>
-    </div>
-
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
-            authDomain: "whitermultiplayer.firebaseapp.com",
-            databaseURL: "https://whitermultiplayer-default-rtdb.firebaseio.com/",
-            projectId: "whitermultiplayer",
-            storageBucket: "whitermultiplayer.firebasestorage.app",
-            messagingSenderId: "859405698218",
-            appId: "1:859405698218:web:44b4d4e4d1a96c93737cd3"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+<div class="main">
+    <div class="card">
+        <h2 style="margin-top:0; font-size: 24px;">Nova Mensagem</h2>
         
-        let playerRef, roomRef, myID;
-        let posX = 380, posY = 230, hp = 100, xp = 0, level = 1;
-        let isPaused = false, isStarted = false, isDead = false;
-        const keys = {}, enemies = [], bullets = [], allPlayers = {};
+        <div class="group">
+            <label>Nome de Exibição do Bot</label>
+            <input type="text" id="botName" placeholder="Ex: Jarvis">
+        </div>
 
-        function startGame() {
-            const name = document.getElementById('username-input').value || "Player";
-            document.getElementById('my-name-tag').innerText = name;
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('ui-stack').style.display = 'block';
-            document.getElementById('game-board').style.display = 'block';
-            isStarted = true;
-            window.lastSpawn = performance.now();
-            requestAnimationFrame(gameLoop);
+        <div class="group" style="margin-top:15px">
+            <label>Mensagem</label>
+            <textarea id="msgText" rows="4" placeholder="O que deseja enviar?"></textarea>
+        </div>
+
+        <div class="group" style="margin-top:15px">
+            <label>Anexar Arquivo</label>
+            <input type="file" id="msgFile" style="font-size: 11px;">
+        </div>
+
+        <button class="btn btn-primary" style="width:100%; margin-top:30px; font-size:16px;" onclick="enviar()">ENVIAR PARA O DISCORD</button>
+        <div id="status"></div>
+    </div>
+</div>
+
+<script>
+    // Memória do navegador
+    window.onload = () => {
+        document.getElementById('botToken').value = localStorage.getItem('tk') || '';
+        document.getElementById('chanId').value = localStorage.getItem('cid') || '';
+        document.getElementById('botName').value = localStorage.getItem('bn') || '';
+        document.getElementById('webUrl').value = localStorage.getItem('wurl') || '';
+    };
+
+    function save() {
+        localStorage.setItem('tk', document.getElementById('botToken').value);
+        localStorage.setItem('cid', document.getElementById('chanId').value);
+        localStorage.setItem('bn', document.getElementById('botName').value);
+    }
+
+    async function gerarWebhook() {
+        save();
+        const token = document.getElementById('botToken').value.trim();
+        const channelId = document.getElementById('chanId').value.trim();
+        const name = document.getElementById('botName').value || "Webhook Dash";
+        const status = document.getElementById('status');
+
+        if(!token || !channelId) {
+            status.innerHTML = "Preencha o Token e o ID!";
+            status.className = "status-error";
+            return;
         }
 
-        // REMOVIDO: qualquer evento de window.onblur ou focus que causava pause automático.
+        status.innerHTML = "⏳ Tentando vincular...";
+        status.className = "";
 
-        function createRoom() {
-            const code = Math.floor(100000 + Math.random() * 900000);
-            connectToRoom(code);
-        }
-
-        function joinRoomPrompt() {
-            const code = prompt("Digite o código de 6 dígitos:");
-            if(code) connectToRoom(code);
-        }
-
-        function connectToRoom(code) {
-            if (playerRef) playerRef.remove();
-            roomRef = db.ref('rooms/' + code);
-            playerRef = roomRef.child('players').push();
-            myID = playerRef.key;
-            playerRef.set({ name: document.getElementById('my-name-tag').innerText, x: posX, y: posY });
-            playerRef.onDisconnect().remove();
-
-            roomRef.on('value', snap => {
-                const data = snap.val() || {};
-                isPaused = data.isPaused || false;
-                if(isPaused) document.getElementById('config-panel').style.display = 'flex';
-                
-                const players = data.players || {};
-                document.querySelectorAll('.other-player').forEach(el => el.remove());
-                for (let id in players) {
-                    allPlayers[id] = players[id];
-                    if (id !== myID) {
-                        const p = players[id];
-                        const el = document.createElement('div');
-                        el.className = 'other-player';
-                        el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
-                        el.innerHTML = `<div class="player-name">${p.name}</div>`;
-                        document.getElementById('game-board').appendChild(el);
-                    }
-                }
+        try {
+            const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/webhooks`, {
+                method: 'POST',
+                headers: { 
+                    "Authorization": `Bot ${token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ name: name })
             });
-            document.getElementById('room-info').innerText = "Sala: " + code;
-            document.getElementById('room-display').innerText = "SALA: " + code;
-            toggleMenu(); 
-        }
 
-        function toggleMenu() {
-            if (!isStarted) return;
-            const panel = document.getElementById('config-panel');
-            const isShowing = (panel.style.display === 'flex');
-            panel.style.display = isShowing ? 'none' : 'flex';
-            
-            const myName = document.getElementById('my-name-tag').innerText;
-            if (roomRef && myName === "Gusta") {
-                roomRef.child('isPaused').set(!isShowing);
-            } else if (!roomRef) {
-                isPaused = !isShowing;
+            const data = await res.json();
+
+            if (res.ok && data.url) {
+                document.getElementById('webUrl').value = data.url;
+                localStorage.setItem('wurl', data.url);
+                status.innerHTML = "✅ Canal vinculado com sucesso!";
+                status.className = "status-success";
+            } else {
+                let errorMsg = data.message || "Erro desconhecido";
+                if(res.status === 403) errorMsg = "O Bot não está no servidor ou não tem permissão.";
+                if(res.status === 404) errorMsg = "ID do Canal não encontrado.";
+                throw new Error(errorMsg);
             }
+        } catch(e) {
+            status.innerHTML = `❌ Erro: ${e.message}`;
+            status.className = "status-error";
+        }
+    }
+
+    async function enviar() {
+        const url = document.getElementById('webUrl').value;
+        const text = document.getElementById('msgText').value;
+        const name = document.getElementById('botName').value;
+        const file = document.getElementById('msgFile').files[0];
+        const status = document.getElementById('status');
+
+        if(!url) {
+            status.innerHTML = "Gere o Webhook primeiro!";
+            status.className = "status-error";
+            return;
         }
 
-        document.addEventListener('keydown', e => { 
-            keys[e.key.toLowerCase()] = true; 
-            if(e.key === 'Escape') { e.preventDefault(); toggleMenu(); }
-        });
-        document.addEventListener('keyup', e => delete keys[e.key.toLowerCase()]);
+        const formData = new FormData();
+        formData.append('payload_json', JSON.stringify({ content: text, username: name }));
+        if(file) formData.append('file', file);
 
-        document.getElementById('game-board').addEventListener('mousedown', e => {
-            if(!isStarted || isPaused || isDead) return;
-            const rect = document.getElementById('game-board').getBoundingClientRect();
-            const angle = Math.atan2(e.clientY - rect.top - (posY + 20), e.clientX - rect.left - (posX + 20));
-            const bEl = document.createElement('div');
-            bEl.className = 'bullet';
-            document.getElementById('game-board').appendChild(bEl);
-            bullets.push({ el: bEl, x: posX + 15, y: posY + 15, vx: Math.cos(angle) * 10, vy: Math.sin(angle) * 10 });
-        });
+        status.innerHTML = "🚀 Enviando...";
+        status.className = "";
 
-        function spawnEnemy() {
-            if (enemies.length > 15 || isPaused) return;
-            const el = document.createElement('div');
-            el.className = 'enemy';
-            let ex = Math.random() > 0.5 ? -30 : 800, ey = Math.random() * 500;
-            document.getElementById('game-board').appendChild(el);
-            enemies.push({ el, x: ex, y: ey, speed: 1.5 + (level * 0.1) });
-        }
-
-        function gameLoop(time) {
-            if (isStarted && !isPaused && !isDead) {
-                if (time - (window.lastSpawn || 0) > 2000 - (level * 100)) {
-                    spawnEnemy();
-                    window.lastSpawn = time;
-                }
-
-                if (keys['w'] && posY > 0) posY -= 5;
-                if (keys['s'] && posY < 460) posY += 5;
-                if (keys['a'] && posX > 0) posX -= 5;
-                if (keys['d'] && posX < 760) posX += 5;
-
-                const pEl = document.getElementById('player');
-                pEl.style.left = posX + 'px'; pEl.style.top = posY + 'px';
-                if (playerRef) playerRef.update({ x: posX, y: posY });
-
-                for (let i = bullets.length - 1; i >= 0; i--) {
-                    const b = bullets[i];
-                    b.x += b.vx; b.y += b.vy;
-                    b.el.style.left = b.x + 'px'; b.el.style.top = b.y + 'px';
-                    if (b.x < -10 || b.x > 810 || b.y < -10 || b.y > 510) {
-                        b.el.remove(); bullets.splice(i, 1);
-                    }
-                }
-
-                enemies.forEach((e, ei) => {
-                    let target = { x: posX, y: posY };
-                    let minDist = Math.hypot(posX - e.x, posY - e.y);
-                    for (let id in allPlayers) {
-                        const d = Math.hypot(allPlayers[id].x - e.x, allPlayers[id].y - e.y);
-                        if (d < minDist) { minDist = d; target = allPlayers[id]; }
-                    }
-                    const angle = Math.atan2(target.y - e.y, target.x - e.x);
-                    e.x += Math.cos(angle) * e.speed;
-                    e.y += Math.sin(angle) * e.speed;
-                    e.el.style.left = e.x + 'px'; e.el.style.top = e.y + 'px';
-
-                    if (Math.hypot(posX - e.x, posY - e.y) < 30) {
-                        hp -= 0.5;
-                        if (hp <= 0) { isDead = true; document.getElementById('game-over').style.display = 'flex'; }
-                    }
-
-                    bullets.forEach((b, bi) => {
-                        if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
-                            e.el.remove(); enemies.splice(ei, 1);
-                            b.el.remove(); bullets.splice(bi, 1);
-                            xp += 20;
-                            if (xp >= level * 100) { level++; xp = 0; }
-                        }
-                    });
-                });
+        try {
+            const res = await fetch(url, { method: 'POST', body: formData });
+            if(res.ok) {
+                status.innerHTML = "✅ Mensagem enviada!";
+                status.className = "status-success";
+                document.getElementById('msgText').value = "";
+            } else {
+                status.innerHTML = "❌ Erro ao enviar para o Webhook.";
+                status.className = "status-error";
             }
-            document.getElementById('hp-fill').style.width = hp + "%";
-            document.getElementById('xp-val').innerText = xp;
-            document.getElementById('lvl-val').innerText = level;
-            requestAnimationFrame(gameLoop);
+        } catch(e) {
+            status.innerHTML = "❌ Erro de conexão/CORS.";
+            status.className = "status-error";
         }
-    </script>
+    }
+</script>
+
 </body>
 </html>
