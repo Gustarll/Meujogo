@@ -2,13 +2,16 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>GAME SHOT - WASD</title>
+    <title>GAME SHOT - Final</title>
     <style>
-        body { margin: 0; background: #222; color: white; font-family: sans-serif; overflow: hidden; }
-        #menu { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 10; }
-        canvas { display: block; background: #333; cursor: crosshair; }
-        .btn { padding: 15px 30px; margin: 10px; cursor: pointer; background: #e74c3c; border: none; color: white; font-weight: bold; border-radius: 5px; }
-        input { padding: 10px; font-size: 1.2rem; text-align: center; width: 150px; border-radius: 5px; border: none; }
+        body { margin: 0; background: #1a1a1a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        #menu { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 10; }
+        canvas { display: block; background: #2c3e50; }
+        .btn { padding: 15px 30px; margin: 10px; cursor: pointer; background: #e74c3c; border: none; color: white; font-weight: bold; border-radius: 5px; transition: 0.3s; }
+        .btn:hover { background: #c0392b; transform: scale(1.05); }
+        input { padding: 12px; font-size: 1.2rem; text-align: center; width: 160px; border-radius: 5px; border: 2px solid #3498db; background: #333; color: white; }
+        #status { margin-top: 15px; color: #f1c40f; font-weight: bold; }
+        .controls-hint { position: absolute; bottom: 20px; left: 20px; color: #bdc3c7; font-size: 0.9rem; }
     </style>
 </head>
 <body>
@@ -16,22 +19,24 @@
 <div id="menu">
     <h1>GAME SHOT</h1>
     <button class="btn" onclick="startTraining()">MODO TREINAMENTO</button>
-    <hr style="width: 200px; border: 0.5px solid #555;">
+    <div style="height: 2px; width: 250px; background: #444; margin: 20px;"></div>
     <h3>MODO ONLINE (1v1)</h3>
     <button class="btn" style="background: #27ae60;" onclick="createRoom()">CRIAR CÓDIGO</button>
     <div style="margin-top: 10px;">
-        <input type="text" id="roomInput" placeholder="000000" maxlength="6">
-        <button class="btn" style="background: #2980b9;" onclick="joinRoom()">ENTRAR</button>
+        <input type="text" id="roomInput" placeholder="CÓDIGO" maxlength="6">
+        <button class="btn" style="background: #2980b9; margin-left: 5px;" onclick="joinRoom()">ENTRAR</button>
     </div>
     <p id="status"></p>
 </div>
 
+<div class="controls-hint">Mover: WASD | Atirar: Clique Mouse</div>
 <canvas id="gameCanvas"></canvas>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+    // Configuração do seu projeto
     const firebaseConfig = {
         apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
         authDomain: "whitermultiplayer.firebaseapp.com",
@@ -47,21 +52,24 @@
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-    // Estado do Jogador
-    let player = { 
-        x: 300, y: 300, radius: 20, color: '#3498db', 
-        angle: 0, lastShot: 0, speed: 5 
-    };
-    let enemy = { x: -100, y: -100, radius: 20, color: '#e74c3c', angle: 0 };
+    // Entidades
+    let player = { x: 300, y: 300, radius: 18, color: '#3498db', angle: 0, lastShot: 0, speed: 5 };
+    let enemy = { x: -500, y: -500, radius: 18, color: '#e74c3c', angle: 0 };
     let keys = {};
+    let mousePos = { x: 0, y: 0 };
     let roomId = null;
     let isPlayer1 = false;
-    let mousePos = { x: 0, y: 0 };
+    let inGame = false;
 
-    // Controles WASD
+    // Listeners de Input
     window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
     window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
     window.addEventListener('mousemove', (e) => {
@@ -69,17 +77,17 @@
         mousePos.y = e.clientY;
     });
 
-    // Funções de Sala (Firebase)
+    // SISTEMA DE SALAS
     window.createRoom = function() {
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         roomId = code;
         isPlayer1 = true;
-        set(ref(db, 'rooms/' + roomId), { 
-            p1: { x: 200, y: 300, angle: 0 }, 
-            status: 'waiting' 
+        set(ref(db, 'rooms/' + roomId), {
+            p1: { x: 200, y: 300, angle: 0 },
+            status: 'waiting'
         });
-        document.getElementById('status').innerText = "Código: " + code + " (Aguardando...)";
-        observeRoom();
+        document.getElementById('status').innerText = "CÓDIGO: " + code + " (Aguardando oponente...)";
+        startListening();
     };
 
     window.joinRoom = function() {
@@ -87,41 +95,56 @@
         if(code.length === 6) {
             roomId = code;
             isPlayer1 = false;
-            update(ref(db, 'rooms/' + roomId), { 
-                p2: { x: 600, y: 300, angle: 0 }, 
-                status: 'playing' 
+            update(ref(db, 'rooms/' + roomId), {
+                p2: { x: 600, y: 300, angle: 0 },
+                status: 'playing'
             });
-            observeRoom();
+            startListening();
         }
     };
 
-    function observeRoom() {
+    window.startTraining = () => {
+        document.getElementById('menu').style.display = 'none';
+        inGame = true;
+    };
+
+    function startListening() {
         onValue(ref(db, 'rooms/' + roomId), (snapshot) => {
             const data = snapshot.val();
             if(!data) return;
-            if(data.status === 'playing') document.getElementById('menu').style.display = 'none';
+            if(data.status === 'playing') {
+                document.getElementById('menu').style.display = 'none';
+                inGame = true;
+            }
+            // Atualiza posição do outro jogador
             if(isPlayer1 && data.p2) enemy = data.p2;
             if(!isPlayer1 && data.p1) enemy = data.p1;
         });
     }
 
-    // Tiro Instantâneo
+    // DISPARO
     window.addEventListener('mousedown', () => {
+        if(!inGame) return;
         const agora = Date.now();
-        if(agora - player.lastShot > 500) { // Delay 0.5s
+        if(agora - player.lastShot > 500) { // 0.5s delay
             player.lastShot = agora;
-            checkHit();
+            drawShootEffect();
         }
     });
 
-    function checkHit() {
-        // Lógica simples de colisão do tiro (Raio)
-        console.log("Fogo!");
-        // Em um projeto real, aqui enviamos o evento de "dano" para o Firebase
+    function drawShootEffect() {
+        // Efeito visual do tiro instantâneo
+        ctx.beginPath();
+        ctx.strokeStyle = "yellow";
+        ctx.lineWidth = 2;
+        ctx.moveTo(player.x, player.y);
+        ctx.lineTo(mousePos.x, mousePos.y);
+        ctx.stroke();
     }
 
-    function updatePhysics() {
-        if (document.getElementById('menu').style.display !== 'none' && roomId !== "training") return;
+    // LOOP DE FÍSICA E DESENHO
+    function update() {
+        if(!inGame) return;
 
         // Movimento WASD
         if (keys['w']) player.y -= player.speed;
@@ -129,10 +152,10 @@
         if (keys['a']) player.x -= player.speed;
         if (keys['d']) player.x += player.speed;
 
-        // Ângulo da Arma (Olhando para o Mouse)
+        // Ângulo da Arma (Palito)
         player.angle = Math.atan2(mousePos.y - player.y, mousePos.x - player.x);
 
-        // Enviar para Firebase
+        // Sincronizar com Firebase
         if (roomId && roomId !== "training") {
             const path = isPlayer1 ? `rooms/${roomId}/p1` : `rooms/${roomId}/p2`;
             update(ref(db, path), { x: player.x, y: player.y, angle: player.angle });
@@ -140,41 +163,44 @@
     }
 
     function drawEntity(x, y, angle, color) {
-        // Desenha a Arma (Palito)
+        // 1. Desenha a Arma (Palito)
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(angle);
-        ctx.fillStyle = "#7f8c8d";
-        ctx.fillRect(10, -3, 30, 6); // O palito
+        ctx.fillStyle = "#555";
+        ctx.fillRect(15, -4, 35, 8); // Posição do palito em relação ao centro
+        ctx.strokeStyle = "white";
+        ctx.strokeRect(15, -4, 35, 8);
         ctx.restore();
 
-        // Desenha o Boneco (Bolinha)
+        // 2. Desenha o Corpo (Bolinha)
         ctx.beginPath();
-        ctx.arc(x, y, 20, 0, Math.PI * 2);
+        ctx.arc(x, y, player.radius, 0, Math.PI * 2);
         ctx.fillStyle = color;
         ctx.fill();
         ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.stroke();
+        ctx.closePath();
     }
 
-    function loop() {
-        updatePhysics();
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function gameLoop() {
+        update();
         
-        // Desenha Jogador e Inimigo
-        drawEntity(player.x, player.y, player.angle, player.color);
-        if(roomId) drawEntity(enemy.x, enemy.y, enemy.angle, '#e74c3c');
+        // Limpar tela
+        ctx.fillStyle = "#2c3e50";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        requestAnimationFrame(loop);
+        // Desenhar Inimigo
+        drawEntity(enemy.x, enemy.y, enemy.angle, '#e74c3c');
+        
+        // Desenhar Jogador
+        drawEntity(player.x, player.y, player.angle, player.color);
+
+        requestAnimationFrame(gameLoop);
     }
 
-    window.startTraining = () => {
-        document.getElementById('menu').style.display = 'none';
-        roomId = "training";
-    };
-
-    loop();
+    gameLoop();
 </script>
 </body>
 </html>
