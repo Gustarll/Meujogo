@@ -1,37 +1,6 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GAME SHOT - TESTE V3</title>
-    <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
-        #menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; z-index: 100; }
-        canvas { display: block; background: #111; }
-        button { padding: 10px 20px; font-size: 18px; cursor: pointer; background: #27ae60; color: white; border: none; margin: 5px; }
-        input { padding: 10px; width: 150px; text-align: center; }
-    </style>
-</head>
-<body>
-
-<div id="menu">
-    <h1>GAME SHOT</h1>
-    <button onclick="iniciarTreino()">MODO TREINAMENTO</button>
-    <div style="margin: 20px 0;">
-        <p>MODO ONLINE</p>
-        <button onclick="criarSala()" style="background: #2980b9;">CRIAR CÓDIGO</button><br>
-        <input type="text" id="inputCodigo" placeholder="000000">
-        <button onclick="entrarSala()" style="background: #c0392b;">ENTRAR</button>
-    </div>
-    <p id="msg"></p>
-</div>
-
-<canvas id="jogo"></canvas>
-
 <script type="module">
-    // Importando apenas o necessário do Firebase
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, set, update, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDqYWTRKvmyjRM-to5raljV464Zvott4eM",
@@ -49,28 +18,22 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Configurações do Player
-    let p = { x: 200, y: 200, angulo: 0, cor: '#00f', lastShot: 0 };
-    let inimigo = { x: -100, y: -100, angulo: 0, cor: '#f00' };
+    let player = { x: 200, y: 200, angulo: 0, cor: 'cyan', lastShot: 0, vivo: true };
+    let inimigo = { x: -500, y: -500, angulo: 0, cor: 'red', vivo: true };
+    let rastro = null;
     let teclas = {};
     let rodando = false;
     let meuId = ""; 
     let salaId = "";
 
-    // Captura de Teclado (WASD)
     window.onkeydown = (e) => teclas[e.key.toLowerCase()] = true;
     window.onkeyup = (e) => teclas[e.key.toLowerCase()] = false;
 
-    // Funções de Sala
-    window.iniciarTreino = () => {
-        document.getElementById('menu').style.display = 'none';
-        rodando = true;
-    };
-
+    // Funções de Sala (Modo Online)
     window.criarSala = () => {
         salaId = Math.floor(100000 + Math.random() * 900000).toString();
         meuId = "p1";
-        set(ref(db, 'salas/' + salaId), { p1: {x:200, y:200, a:0}, status: 'esperando' });
+        set(ref(db, 'salas/' + salaId), { p1: {x:200, y:200, a:0, v:true}, status: 'esperando' });
         document.getElementById('msg').innerText = "CÓDIGO: " + salaId;
         conectarFirebase();
     };
@@ -79,7 +42,7 @@
         salaId = document.getElementById('inputCodigo').value;
         if(salaId.length === 6) {
             meuId = "p2";
-            update(ref(db, 'salas/' + salaId), { p2: {x:600, y:200, a:0}, status: 'jogando' });
+            update(ref(db, 'salas/' + salaId), { p2: {x:600, y:200, a:0, v:true}, status: 'jogando' });
             conectarFirebase();
         }
     };
@@ -92,54 +55,108 @@
                 document.getElementById('menu').style.display = 'none';
                 rodando = true;
             }
-            if(meuId === "p1" && dados.p2) inimigo = { x: dados.p2.x, y: dados.p2.y, angulo: dados.p2.a };
-            if(meuId === "p2" && dados.p1) inimigo = { x: dados.p1.x, y: dados.p1.y, angulo: dados.p1.a };
+            // Sincroniza Inimigo
+            let outro = meuId === "p1" ? dados.p2 : dados.p1;
+            if(outro) {
+                inimigo.x = outro.x;
+                inimigo.y = outro.y;
+                inimigo.angulo = outro.a;
+                inimigo.vivo = outro.v;
+            }
+            // Verifica se você morreu (pelo dado do servidor)
+            let eu = meuId === "p1" ? dados.p1 : dados.p2;
+            if(eu && eu.v === false && player.vivo === true) {
+                morrer();
+            }
         });
     }
 
-    // Tiro
+    function morrer() {
+        player.vivo = false;
+        setTimeout(() => {
+            player.x = Math.random() * (canvas.width - 100) + 50;
+            player.y = Math.random() * (canvas.height - 100) + 50;
+            player.vivo = true;
+            enviarDados();
+        }, 1000); // 1 segundo para renascer
+    }
+
+    function enviarDados() {
+        if(salaId) {
+            update(ref(db, `salas/${salaId}/${meuId}`), { 
+                x: player.x, y: player.y, a: player.angulo, v: player.vivo 
+            });
+        }
+    }
+
+    // Lógica do Tiro e Rastro
     window.onmousedown = () => {
-        if(!rodando) return;
+        if(!rodando || !player.vivo) return;
         const agora = Date.now();
-        if(agora - p.lastShot > 500) { // Delay 0.5s
-            p.lastShot = agora;
-            // Efeito de flash do tiro
-            ctx.beginPath();
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = 2;
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x + Math.cos(p.angulo)*1000, p.y + Math.sin(p.angulo)*1000);
-            ctx.stroke();
+        if(agora - player.lastShot > 500) {
+            player.lastShot = agora;
+            
+            // Define o rastro (ponto A ao ponto B)
+            const alcance = 2000;
+            const destinoX = player.x + Math.cos(player.angulo) * alcance;
+            const destinoY = player.y + Math.sin(player.angulo) * alcance;
+            
+            rastro = { x1: player.x, y1: player.y, x2: destinoX, y2: destinoY, alpha: 1 };
+
+            // Verifica colisão do tiro com o inimigo
+            verificarAcerto(destinoX, destinoY);
         }
     };
 
-    function loop() {
-        if(rodando) {
-            // Movimentação WASD
-            if(teclas['w']) p.y -= 5;
-            if(teclas['s']) p.y += 5;
-            if(teclas['a']) p.x -= 5;
-            if(teclas['d']) p.x += 5;
-
-            // Mira
-            window.onmousemove = (e) => {
-                p.angulo = Math.atan2(e.clientY - p.y, e.clientX - p.x);
-            };
-
-            // Enviar posição
-            if(salaId) {
-                update(ref(db, `salas/${salaId}/${meuId}`), { x: p.x, y: p.y, a: p.angulo });
-            }
-
-            // Desenhar
-            ctx.fillStyle = "#111";
-            ctx.fillRect(0,0,canvas.width, canvas.height);
-
-            // Desenha Inimigo
-            desenharBoneco(inimigo.x, inimigo.y, inimigo.angulo, "red");
-            // Desenha Você
-            desenharBoneco(p.x, p.y, p.angulo, "cyan");
+    function verificarAcerto(tx, ty) {
+        if(!inimigo.vivo) return;
+        
+        // Cálculo de distância entre a linha do tiro e o centro do inimigo
+        const d = distLinhaPonto(player.x, player.y, tx, ty, inimigo.x, inimigo.y);
+        
+        if(d < 20) { // 20 é o raio do boneco
+            const outroId = meuId === "p1" ? "p2" : "p1";
+            update(ref(db, `salas/${salaId}/${outroId}`), { v: false });
         }
+    }
+
+    function distLinhaPonto(x1, y1, x2, y2, px, py) {
+        const area = Math.abs((y2 - y1) * px - (x2 - x1) * py + x2 * y1 - y2 * x1);
+        const tamLinha = Math.sqrt(Math.pow(y2 - y1, 2) + Math.pow(x2 - x1, 2));
+        return area / tamLinha;
+    }
+
+    function loop() {
+        if(rodando && player.vivo) {
+            if(teclas['w']) player.y -= 5;
+            if(teclas['s']) player.y += 5;
+            if(teclas['a']) player.x -= 5;
+            if(teclas['d']) player.x += 5;
+
+            window.onmousemove = (e) => {
+                player.angulo = Math.atan2(e.clientY - player.y, e.clientX - player.x);
+            };
+            enviarDados();
+        }
+
+        // Desenho
+        ctx.fillStyle = "#111";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Desenha rastro da bala (desaparece gradualmente)
+        if(rastro && rastro.alpha > 0) {
+            ctx.strokeStyle = `rgba(255, 255, 255, ${rastro.alpha})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(rastro.x1, rastro.y1);
+            ctx.lineTo(rastro.x2, rastro.y2);
+            ctx.stroke();
+            rastro.alpha -= 0.05; // Velocidade do sumiço do rastro
+        }
+
+        if(inimigo.vivo) desenharBoneco(inimigo.x, inimigo.y, inimigo.angulo, "red");
+        if(player.vivo) desenharBoneco(player.x, player.y, player.angulo, "cyan");
+
         requestAnimationFrame(loop);
     }
 
@@ -147,18 +164,13 @@
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(ang);
-        // O Palito (Arma)
         ctx.fillStyle = "#fff";
-        ctx.fillRect(15, -3, 30, 6);
-        // A Bolinha (Corpo)
+        ctx.fillRect(15, -3, 30, 6); // Arma
         ctx.restore();
         ctx.beginPath();
         ctx.arc(x, y, 20, 0, Math.PI*2);
         ctx.fillStyle = cor;
         ctx.fill();
     }
-
     loop();
 </script>
-</body>
-</html>
