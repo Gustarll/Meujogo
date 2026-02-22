@@ -1,1 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Ball Combat - Arena Pro</title>
+    <style>
+        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        canvas { background: #2c3e50; border: 4px solid #3498db; display: none; cursor: crosshair; }
+        #lobby { text-align: center; background: #2c3e50; padding: 30px; border-radius: 15px; border: 3px solid #3498db; width: 320px; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 5px; border: 1px solid #34495e; text-align: center; background: #1a1a1a; color: white; }
+        .btn { display: block; width: 100%; padding: 15px; margin: 10px 0; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        #escMenu { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2c3e50; padding: 30px; border-radius: 15px; border: 4px solid #3498db; width: 280px; text-align: center; z-index: 1000; }
+        #ui { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 10px; border: 2px solid #3498db; display: none; }
+    </style>
+</head>
+<body>
 
+    <div id="escMenu">
+        <h2 style="color: #3498db; margin: 0 0 10px 0;">PAUSA</h2>
+        <div id="displayCode" style="font-size: 1.8em; color: #f1c40f; font-weight: bold; margin-bottom: 15px;">SALA: ----</div>
+        <button class="btn" onclick="toggleEsc()">VOLTAR</button>
+        <button class="btn" style="background:#e74c3c" onclick="sairDaSala()">SAIR DA SALA</button>
+    </div>
+
+    <div id="ui"><div id="scoreBoard"><b>PLACAR</b></div></div>
+
+    <div id="lobby">
+        <h1 style="color: #3498db;">BALL COMBAT</h1>
+        <input type="text" id="nickInput" placeholder="Nick..." value="Gusta">
+        <button class="btn" onclick="iniciar(true)">CRIAR SALA</button>
+        <input type="text" id="roomInput" placeholder="Código">
+        <button class="btn" style="background:#27ae60" onclick="iniciar(false)">ENTRAR</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, where, deleteDoc, updateDoc, arrayUnion, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBg4iJlgMKbkukddt9bWLfpRXm27u14Zg0",
+            authDomain: "cameralog-24090.firebaseapp.com",
+            projectId: "cameralog-24090",
+            storageBucket: "cameralog-24090.firebasestorage.app",
+            messagingSenderId: "1054247726586",
+            appId: "1:1054247726586:web:2e3c0584e54ada96a0c843"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let gameActive = false, isPaused = false;
+        const MAP_W = 1000, MAP_H = 700; 
+        let player = { x: 500, y: 350, n: "", r: "", id: "p_" + Math.random().toString(36).substr(2, 5), k: 0, wallReady: true, dashReady: true, shotReady: true, speed: 6 };
+        let others = {}, bullets = [], syncWalls = [], keys = {};
+
+        window.iniciar = async (novo) => {
+            player.n = document.getElementById('nickInput').value || "Gusta";
+            player.r = novo ? Math.floor(1000 + Math.random() * 9000).toString() : document.getElementById('roomInput').value;
+            
+            document.getElementById('displayCode').innerText = "SALA: " + player.r;
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('ui').style.display = 'block';
+            canvas.style.display = 'block';
+            canvas.width = 1000; canvas.height = 700;
+
+            await setDoc(doc(db, "salas", player.r), { paredes: [] }, { merge: true });
+            await setDoc(doc(db, "partidas", player.id), { n: player.n, x: player.x, y: player.y, r: player.r, k: 0, ts: serverTimestamp() });
+
+            gameActive = true;
+            loop();
+
+            onSnapshot(query(collection(db, "partidas"), where("r", "==", player.r)), (snap) => {
+                let score = "<b>PLACAR</b><br>";
+                let idsNoBanco = [];
+                snap.forEach(d => {
+                    const data = d.data();
+                    idsNoBanco.push(d.id);
+                    if (d.id !== player.id) {
+                        // Se o player já existe, guardamos o destino, mas não teletransportamos
+                        if (others[d.id]) {
+                            others[d.id].targetX = data.x;
+                            others[d.id].targetY = data.y;
+                            others[d.id].n = data.n;
+                            others[d.id].k = data.k;
+                        } else {
+                            // Se é novo, inicializa na posição atual
+                            others[d.id] = { ...data, targetX: data.x, targetY: data.y };
+                        }
+                    } else if(data.respawn) renascer();
+                    score += `${data.n}: ${data.k || 0}<br>`;
+                });
+                Object.keys(others).forEach(id => { if(!idsNoBanco.includes(id)) delete others[id]; });
+                document.getElementById('scoreBoard').innerHTML = score;
+            });
+
+            onSnapshot(doc(db, "salas", player.r), (doc) => {
+                if(doc.exists()) syncWalls = doc.data().paredes || [];
+            });
+        };
+
+        window.sairDaSala = async () => {
+            gameActive = false;
+            await deleteDoc(doc(db, "partidas", player.id));
+            location.reload();
+        };
+
+        function renascer() {
+            player.x = Math.random() * (MAP_W - 100) + 50;
+            player.y = Math.random() * (MAP_H - 100) + 50;
+            updateDoc(doc(db, "partidas", player.id), { x: player.x, y: player.y, respawn: false, ts: serverTimestamp() });
+        }
+
+        window.toggleEsc = () => {
+            isPaused = !isPaused;
+            document.getElementById('escMenu').style.display = isPaused ? 'block' : 'none';
+        };
+
+        window.addEventListener('keydown', e => { 
+            keys[e.code] = true; 
+            if(e.code === 'Escape' && gameActive) toggleEsc();
+            if(e.code === 'Digit4' && gameActive && !isPaused && player.wallReady) usarParede();
+            if(e.code === 'ShiftLeft' && gameActive && !isPaused && player.dashReady) usarDash();
+        });
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        function usarDash() {
+            player.dashReady = false;
+            player.speed = 20;
+            setTimeout(() => player.speed = 6, 200);
+            setTimeout(() => player.dashReady = true, 1500);
+        }
+
+        async function usarParede() {
+            player.wallReady = false;
+            const novaParede = { x: player.x, y: player.y, id: "w_" + Math.random(), hp: 3 };
+            await updateDoc(doc(db, "salas", player.r), { paredes: arrayUnion(novaParede) });
+            setTimeout(() => player.wallReady = true, 3000);
+        }
+
+        canvas.addEventListener('mousedown', e => {
+            if(!gameActive || isPaused || !player.shotReady) return;
+            player.shotReady = false;
+            const rect = canvas.getBoundingClientRect();
+            const angle = Math.atan2((e.clientY - rect.top) - player.y, (e.clientX - rect.left) - player.x);
+            bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle) * 14, vy: Math.sin(angle) * 14 });
+            setTimeout(() => player.shotReady = true, 500);
+        });
+
+        let lastUpdate = 0;
+        function loop() {
+            if(!isPaused && gameActive) {
+                let moved = false;
+                if(keys['KeyW'] && player.y > 20) { player.y -= player.speed; moved = true; }
+                if(keys['KeyS'] && player.y < MAP_H - 20) { player.y += player.speed; moved = true; }
+                if(keys['KeyA'] && player.x > 20) { player.x -= player.speed; moved = true; }
+                if(keys['KeyD'] && player.x < MAP_W - 20) { player.x += player.speed; moved = true; }
+
+                if(moved && Date.now() - lastUpdate > 40) { 
+                    updateDoc(doc(db, "partidas", player.id), { x: player.x, y: player.y, ts: serverTimestamp() });
+                    lastUpdate = Date.now();
+                }
+
+                // --- OTIMIZAÇÃO: Interpolação dos outros jogadores (Liso) ---
+                for (let id in others) {
+                    let p = others[id];
+                    // Move 15% da distância a cada frame (suavização)
+                    p.x += (p.targetX - p.x) * 0.15;
+                    p.y += (p.targetY - p.y) * 0.15;
+                }
+
+                bullets.forEach((b, i) => {
+                    b.x += b.vx; b.y += b.vy;
+                    syncWalls.forEach(w => {
+                        if(Math.hypot(b.x - w.x, b.y - w.y) < 35) {
+                            bullets.splice(i, 1);
+                            let novas = syncWalls.map(p => p.id === w.id ? {...p, hp: p.hp - 1} : p).filter(p => p.hp > 0);
+                            updateDoc(doc(db, "salas", player.r), { paredes: novas });
+                        }
+                    });
+                    for(let id in others) {
+                        if(Math.hypot(b.x - others[id].x, b.y - others[id].y) < 25) {
+                            bullets.splice(i, 1);
+                            player.k++;
+                            updateDoc(doc(db, "partidas", player.id), { k: player.k });
+                            updateDoc(doc(db, "partidas", id), { respawn: true });
+                        }
+                    }
+                    if(b.x < 0 || b.x > MAP_W || b.y < 0 || b.y > MAP_H) bullets.splice(i, 1);
+                });
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "#3498db"; ctx.lineWidth = 2; ctx.strokeRect(0,0, MAP_W, MAP_H);
+            
+            syncWalls.forEach(w => { 
+                ctx.fillStyle = "#3498db"; ctx.globalAlpha = w.hp/3;
+                ctx.fillRect(w.x-25, w.y-25, 50, 50); ctx.globalAlpha = 1;
+                ctx.strokeStyle = "white"; ctx.strokeRect(w.x-25, w.y-25, 50, 50);
+            });
+            
+            ctx.fillStyle = "#f1c40f";
+            bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, Math.PI*2); ctx.fill(); });
+            
+            desenhar(player.x, player.y, "#3498db", player.n, true);
+            for(let id in others) desenhar(others[id].x, others[id].y, "#e74c3c", others[id].n, false);
+            
+            requestAnimationFrame(loop);
+        }
+
+        function desenhar(x, y, col, nome, eu) {
+            ctx.beginPath(); ctx.arc(x, y, 20, 0, Math.PI*2);
+            ctx.fillStyle = col; ctx.fill();
+            ctx.strokeStyle = eu ? "white" : "black"; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = "white"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
+            ctx.fillText(nome, x, y - 35);
+        }
+    </script>
+</body>
+</html>
